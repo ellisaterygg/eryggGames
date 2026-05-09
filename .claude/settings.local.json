@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where godot *)",
+      "PowerShell(& \"D:\\\\my.dev\\\\Godot_v4.6.2\\\\Godot_v4.6.2-stable_mono_win64.exe\" --headless --export-debug \"Android\" 2>&1)",
+      "PowerShell(& \"D:\\\\my.dev\\\\Godot_v4.6.2\\\\Godot_v4.6.2-stable_mono_win64.exe\" --headless --path \"D:\\\\my.dev\\\\eryggGames\" --export-debug \"Android\" 2>&1)",
+      "PowerShell($proc = Start-Process -FilePath \"D:\\\\my.dev\\\\Godot_v4.6.2\\\\Godot_v4.6.2-stable_mono_win64_console.exe\" -ArgumentList \"--headless --path `\"D:\\\\my.dev\\\\eryggGames`\" --export-debug Android\" -WorkingDirectory \"D:\\\\my.dev\\\\eryggGames\" -Wait -PassThru -NoNewWindow -RedirectStandardOutput \"D:\\\\my.dev\\\\godot_export_stdout.txt\" -RedirectStandardError \"D:\\\\my.dev\\\\godot_export_stderr.txt\"; $proc.ExitCode)",
+      "PowerShell(Get-Item \"D:\\\\my.dev\\\\eryggGames\\\\eryggGames.apk\" | Select-Object FullName, @{N=\"SizeMB\";E={[math]::Round\\($_.Length/1MB,1\\)}}, LastWriteTime)"
+    ]
+  }
+}

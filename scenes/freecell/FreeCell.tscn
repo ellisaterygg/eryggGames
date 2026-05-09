@@ -1,0 +1,82 @@
+[gd_scene format=3 uid="uid://col1kt5oumka3"]
+
+[ext_resource type="Script" uid="uid://jxamxbsofe1p" path="res://scripts/freecell/CardPile.cs" id="CardPile_Script"]
+[ext_resource type="Script" uid="uid://bvs5yo4c5n0r4" path="res://scripts/freecell/FreeCell.cs" id="FreeCell_Script"]
+
+[node name="FreeCell" type="Node2D"]
+script = ExtResource("FreeCell_Script")
+
+[node name="Background" type="Sprite2D" parent="."]
+position = Vector2(360, 640)
+z_index = -1
+modulate = Color(0.65, 0.65, 0.65, 1)
+
+[node name="FreeCells" type="Node2D" parent="."]
+
+[node name="Cell0" type="Node2D" parent="FreeCells"]
+position = Vector2(45, 155)
+script = ExtResource("CardPile_Script")
+
+[node name="Cell1" type="Node2D" parent="FreeCells"]
+position = Vector2(135, 155)
+script = ExtResource("CardPile_Script")
+
+[node name="Cell2" type="Node2D" parent="FreeCells"]
+position = Vector2(225, 155)
+script = ExtResource("CardPile_Script")
+
+[node name="Cell3" type="Node2D" parent="FreeCells"]
+position = Vector2(315, 155)
+script = ExtResource("CardPile_Script")
+
+[node name="Foundations" type="Node2D" parent="."]
+
+[node name="Foundation0" type="Node2D" parent="Foundations"]
+position = Vector2(405, 167)
+script = ExtResource("CardPile_Script")
+
+[node name="Foundation1" type="Node2D" parent="Foundations"]
+position = Vector2(495, 167)
+script = ExtResource("CardPile_Script")
+
+[node name="Foundation2" type="Node2D" parent="Foundations"]
+position = Vector2(585, 167)
+script = ExtResource("CardPile_Script")
+
+[node name="Foundation3" type="Node2D" parent="Foundations"]
+position = Vector2(675, 167)
+script = ExtResource("CardPile_Script")
+
+[node name="Tableau" type="Node2D" parent="."]
+
+[node name="Column0" type="Node2D" parent="Tableau"]
+position = Vector2(45, 290)
+script = ExtResource("CardPile_Script")
+
+[node name="Column1" type="Node2D" parent="Tableau"]
+position = Vector2(135, 290)
+script = ExtResource("CardPile_Script")
+
+[node name="Column2" type="Node2D" parent="Tableau"]
+position = Vector2(225, 290)
+script = ExtResource("CardPile_Script")
+
+[node name="Column3" type="Node2D" parent="Tableau"]
+position = Vector2(315, 290)
+script = ExtResource("CardPile_Script")
+
+[node name="Column4" type="Node2D" parent="Tableau"]
+position = Vector2(405, 290)
+script = ExtResource("CardPile_Script")
+
+[node name="Column5" type="Node2D" parent="Tableau"]
+position = Vector2(495, 290)
+script = ExtResource("CardPile_Script")
+
+[node name="Column6" type="Node2D" parent="Tableau"]
+position = Vector2(585, 290)
+script = ExtResource("CardPile_Script")
+
+[node name="Column7" type="Node2D" parent="Tableau"]
+position = Vector2(675, 290)
+script = ExtResource("CardPile_Script")

@@ -1,0 +1,20 @@
+# Godot-specific ignores
+.godot/
+.mono/
+export_presets.cfg
+debug.keystore
+*.apk
+*.apk.idsig
+
+# .NET-specific ignores
+bin/
+obj/
+*.csproj.user
+*.sln.docstates
+*.suo
+*.user
+*.userosscache
+
+# OS-specific ignores
+.DS_Store
+Thumbs.db
