@@ -259,7 +259,10 @@ public partial class FreeCellView : Node2D
 
 		var bottomCard = _dragCards[0];
 		int count      = _dragCards.Count;
-		var target     = GetPileAt(dropCenter);
+		
+		// --- NEW AREA-BASED HIT DETECTION ---
+		var allPiles = _freeCells.Concat(_foundations).Concat(_tableau).ToList();
+		var target = OverlapUtils.GetMostOverlapping(bottomCard.GetGlobalRect(), allPiles, p => p.GetGlobalRect());
 
 		bool valid = false;
 		if (target != null && target != _dragOriginPile)

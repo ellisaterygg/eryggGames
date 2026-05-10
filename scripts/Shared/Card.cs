@@ -42,6 +42,8 @@ public partial class Card : Node2D
 		QueueRedraw();
 	}
 
+	public Rect2 GetGlobalRect() => new Rect2(GlobalPosition - new Vector2(CardWidth / 2, CardHeight / 2), CardWidth, CardHeight);
+
 	public override void _Draw()
 	{
 		var rect = new Rect2(-CardWidth / 2, -CardHeight / 2, CardWidth, CardHeight);

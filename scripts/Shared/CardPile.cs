@@ -16,6 +16,8 @@ public partial class CardPile : Node2D
     public int Count => Cards.Count;
     public bool IsEmpty => Cards.Count == 0;
 
+    public Rect2 GetGlobalRect() => new Rect2(GlobalPosition - new Vector2(Card.CardWidth / 2, Card.CardHeight / 2), Card.CardWidth, Card.CardHeight);
+
     public void AddCard(Card card)
     {
         bool wasEmpty = IsEmpty;
