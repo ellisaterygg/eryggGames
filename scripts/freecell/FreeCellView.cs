@@ -42,7 +42,7 @@ public partial class FreeCellView : Node2D
 #if DEBUG
 		EngineTests.RunTests();
 #endif
-		_cardScene  = GD.Load<PackedScene>("res://scenes/freecell/Card.tscn");
+		_cardScene  = GD.Load<PackedScene>("res://scenes/Shared/Card.tscn");
 		_topInset   = GetTopSafeInset();
 		LoadBackground();
 		SetupMenu();

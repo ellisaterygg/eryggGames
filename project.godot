@@ -11,9 +11,9 @@ config_version=5
 [application]
 
 config/name="eryggGames"
-config/icon="res://assets/GrantECRLogo.png"
 run/main_scene="res://scenes/Launcher.tscn"
 config/features=PackedStringArray("4.6", "C#", "Forward Plus")
+config/icon="res://assets/GrantECRLogo.png"
 
 [display]
 

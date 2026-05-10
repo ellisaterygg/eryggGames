@@ -7,6 +7,7 @@ namespace EryggGames.Pyramid.Core;
 
 public class PyramidState
 {
+    public List<CardModel> InitialDeal { get; set; } = new List<CardModel>();
     public CardModel?[][] Pyramid { get; set; } = new CardModel?[7][];
     public List<CardModel> Stock { get; set; } = new List<CardModel>();
     public List<CardModel> Waste { get; set; } = new List<CardModel>();
@@ -20,6 +21,7 @@ public class PyramidState
     public PyramidState Clone()
     {
         var clone = new PyramidState();
+        clone.InitialDeal = InitialDeal.ToList();
         for (int i = 0; i < 7; i++)
         {
             for (int j = 0; j <= i; j++)

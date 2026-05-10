@@ -12,6 +12,14 @@ public partial class Card : Node2D
     public Rank Rank { get; private set; }
     public bool IsRed => Suit == Suit.Hearts || Suit == Suit.Diamonds;
     public CardPile CurrentPile { get; set; }
+    
+    private bool _isFaceUp = true;
+    public bool IsFaceUp 
+    { 
+        get => _isFaceUp; 
+        set { _isFaceUp = value; QueueRedraw(); } 
+    }
+
 	private string _rankText;
 	private Color  _suitColor;
 
@@ -37,6 +45,21 @@ public partial class Card : Node2D
 	public override void _Draw()
 	{
 		var rect = new Rect2(-CardWidth / 2, -CardHeight / 2, CardWidth, CardHeight);
+		
+		if (!IsFaceUp)
+		{
+			// Card Back
+			DrawRect(rect, new Color(0.15f, 0.25f, 0.45f)); // Dark blue back
+			DrawRect(rect, Colors.White, filled: false, width: 1.5f);
+			
+			// Simple design on the back
+			var inner = rect.Grow(-8f);
+			DrawRect(inner, new Color(1, 1, 1, 0.2f), filled: false, width: 1f);
+			DrawLine(new Vector2(inner.Position.X, inner.Position.Y), new Vector2(inner.End.X, inner.End.Y), new Color(1, 1, 1, 0.1f));
+			DrawLine(new Vector2(inner.End.X, inner.Position.Y), new Vector2(inner.Position.X, inner.End.Y), new Color(1, 1, 1, 0.1f));
+			return;
+		}
+
 		DrawRect(rect, Colors.White);
 		DrawRect(rect, new Color(0.25f, 0.25f, 0.25f), filled: false, width: 1.5f);
 

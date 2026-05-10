@@ -1,3 +1,4 @@
+#nullable enable
 using Godot;
 using System;
 using System.Collections.Generic;
@@ -10,28 +11,42 @@ namespace EryggGames.Pyramid;
 
 public partial class PyramidView : Node2D
 {
-    private PyramidState _state;
-    private PackedScene _cardScene;
+    private PyramidState _state = new();
+    private PackedScene _cardScene = null!;
+    
     private readonly Dictionary<(int r, int c), Card> _pyramidCards = new();
-    private readonly List<Card> _stockCards = new();
-    private readonly List<Card> _wasteCards = new();
+    private CardPile _stockPile = null!;
+    private CardPile _wastePile = null!;
 
-    private Card _selectedCard;
+    private Card? _selectedCard;
     private float _topInset;
+    
+    // Drag state
+    private Card?   _dragCard;
+    private Vector2 _dragOffset;
+    private Vector2 _dragStartPos;
+    private Vector2 _dragMouseStartPos;
+    private bool    _gameWon;
+    private CanvasLayer? _winOverlay;
 
     public override void _Ready()
     {
-        _cardScene = GD.Load<PackedScene>("res://scenes/freecell/Card.tscn");
+        _cardScene = GD.Load<PackedScene>("res://scenes/Shared/Card.tscn");
         _topInset = GetTopSafeInset();
         
-        BackgroundManager.LoadRandomBackground(GetNode<Sprite2D>("Background"));
+        SetupPiles();
         SetupMenu();
         
         var saved = SaveManager.LoadGame<PyramidState>("Pyramid");
         if (saved != null)
+        {
             ApplyState(saved);
+            LoadBackground(); 
+        }
         else
+        {
             NewGame();
+        }
     }
 
     private float GetTopSafeInset()
@@ -40,6 +55,20 @@ public partial class PyramidView : Node2D
         var safeTopPx = (float)DisplayServer.GetDisplaySafeArea().Position.Y;
         if (safeTopPx <= 0f || screenH <= 0f) return 0f;
         return safeTopPx / screenH * GetViewport().GetVisibleRect().Size.Y;
+    }
+
+    private void SetupPiles()
+    {
+        var stockNode = GetNode<Node2D>("Stock");
+        _stockPile = new CardPile { Name = "StockPile", PileType = PileType.FreeCell };
+        stockNode.AddChild(_stockPile);
+
+        var wasteNode = GetNode<Node2D>("Waste");
+        _wastePile = new CardPile { Name = "WastePile", PileType = PileType.FreeCell };
+        wasteNode.AddChild(_wastePile);
+        
+        stockNode.Position = new Vector2(200, 1100);
+        wasteNode.Position = new Vector2(400, 1100);
     }
 
     private void SetupMenu()
@@ -51,8 +80,9 @@ public partial class PyramidView : Node2D
         layer.AddChild(bar);
 
         float btnY = _topInset + 22f;
-        bar.AddChild(MakeMenuButton("New", new Vector2(30, btnY), NewGame));
-        bar.AddChild(MakeMenuButton("Games", new Vector2(540, btnY), ShowGameSelection));
+        bar.AddChild(MakeMenuButton("New",     new Vector2(30,  btnY), NewGame));
+        bar.AddChild(MakeMenuButton("Restart", new Vector2(200, btnY), RestartGame));
+        bar.AddChild(MakeMenuButton("Games",   new Vector2(540, btnY), ShowGameSelection));
     }
 
     private Button MakeMenuButton(string text, Vector2 pos, Action handler)
@@ -68,26 +98,43 @@ public partial class PyramidView : Node2D
         GetParent<Launcher>()?.SwitchGame("Launcher");
     }
 
+    private void LoadBackground()
+    {
+        BackgroundManager.LoadRandomBackground(GetNode<Sprite2D>("Background"));
+    }
+
     private void NewGame()
     {
-        _state = new PyramidState();
+        ExitWinState();
+        LoadBackground();
         var deck = new Deck().Shuffle();
+        _state = new PyramidState { InitialDeal = deck.Select(c => new CardModel(c.suit, c.rank)).ToList() };
+        DealFromOrder(_state.InitialDeal);
+    }
 
-        int cardIdx = 0;
+    private void RestartGame()
+    {
+        ExitWinState();
+        if (_state.InitialDeal.Count == 0) NewGame();
+        else DealFromOrder(_state.InitialDeal);
+    }
+
+    private void DealFromOrder(List<CardModel> order)
+    {
+        _state.Stock.Clear();
+        _state.Waste.Clear();
+        _state.DeckPasses = 0;
         for (int r = 0; r < 7; r++)
         {
-            for (int c = 0; c <= r; c++)
-            {
-                var (suit, rank) = deck[cardIdx++];
-                _state.Pyramid[r][c] = new CardModel(suit, rank);
-            }
+            for (int c = 0; c <= r; c++) _state.Pyramid[r][c] = null;
         }
 
-        while (cardIdx < deck.Count)
+        int idx = 0;
+        for (int r = 0; r < 7; r++)
         {
-            var (suit, rank) = deck[cardIdx++];
-            _state.Stock.Add(new CardModel(suit, rank));
+            for (int c = 0; c <= r; c++) _state.Pyramid[r][c] = order[idx++];
         }
+        while (idx < order.Count) _state.Stock.Add(order[idx++]);
 
         ApplyState(_state);
         SaveManager.SaveGame("Pyramid", _state);
@@ -98,16 +145,15 @@ public partial class PyramidView : Node2D
         _state = state;
         ClearBoard();
 
+        var container = GetNode("PyramidContainer");
         for (int r = 0; r < 7; r++)
         {
             for (int c = 0; c <= r; c++)
             {
                 var model = _state.Pyramid[r][c];
                 if (model == null) continue;
-
-                var card = _cardScene.Instantiate<Card>();
-                card.Init(model.Suit, model.Rank);
-                GetNode("PyramidContainer").AddChild(card);
+                var card = CreateCard(model);
+                container.AddChild(card);
                 card.Position = GetPyramidPosition(r, c);
                 _pyramidCards[(r, c)] = card;
             }
@@ -115,95 +161,152 @@ public partial class PyramidView : Node2D
 
         foreach (var model in _state.Stock)
         {
-            var card = _cardScene.Instantiate<Card>();
-            card.Init(model.Suit, model.Rank);
-            GetNode("Stock").AddChild(card);
-            card.Position = Vector2.Zero; // Stacked
-            _stockCards.Add(card);
+            var card = CreateCard(model);
+            card.IsFaceUp = true; // Fix: Show the cards so player knows they can match
+            _stockPile.AddCard(card);
         }
 
         foreach (var model in _state.Waste)
         {
-            var card = _cardScene.Instantiate<Card>();
-            card.Init(model.Suit, model.Rank);
-            GetNode("Waste").AddChild(card);
-            card.Position = Vector2.Zero; // Stacked
-            _wasteCards.Add(card);
+            var card = CreateCard(model);
+            card.IsFaceUp = true;
+            _wastePile.AddCard(card);
         }
         
-        UpdateVisuals();
+        UpdateCardVisuals();
+    }
+
+    private Card CreateCard(CardModel model)
+    {
+        var card = _cardScene.Instantiate<Card>();
+        card.Init(model.Suit, model.Rank);
+        return card;
     }
 
     private void ClearBoard()
     {
         foreach (var c in _pyramidCards.Values) c.QueueFree();
         _pyramidCards.Clear();
-        foreach (var c in _stockCards) c.QueueFree();
-        _stockCards.Clear();
-        foreach (var c in _wasteCards) c.QueueFree();
-        _wasteCards.Clear();
+        while (!_stockPile.IsEmpty) _stockPile.RemoveTopCard()?.QueueFree();
+        while (!_wastePile.IsEmpty) _wastePile.RemoveTopCard()?.QueueFree();
         _selectedCard = null;
     }
 
     private Vector2 GetPyramidPosition(int r, int c)
     {
         float xOffset = (c - r / 2.0f) * (Card.CardWidth + 10);
-        float yOffset = r * (Card.CardHeight * 0.4f);
+        float yOffset = r * (Card.CardHeight * 0.45f);
         return new Vector2(xOffset, yOffset);
     }
 
+    // ── Input ──────────────────────────────────────────────────────────────
+
     public override void _Input(InputEvent @event)
     {
-        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } mb)
+        if (_gameWon) return;
+
+        switch (@event)
         {
-            GD.Print($"Pyramid Click at {mb.Position}");
-            HandleClick(mb.Position);
+            case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } mb:
+                BeginDrag(mb.Position);
+                break;
+            case InputEventMouseMotion mm when _dragCard != null:
+                UpdateDrag(mm.Position);
+                break;
+            case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false } mb:
+                if (_dragCard != null) EndDrag(mb.Position);
+                break;
         }
     }
 
-    private void HandleClick(Vector2 pos)
+    private void BeginDrag(Vector2 pos)
     {
-        // Check Pyramid
-        foreach (var kvp in _pyramidCards)
+        _dragMouseStartPos = pos;
+        var card = GetCardAt(pos);
+        if (card == null)
         {
-            if (IsPointInCard(pos, kvp.Value.GlobalPosition))
+            if (IsPointInCard(pos, GetNode<Node2D>("Stock").GlobalPosition))
+                DrawFromStock();
+            return;
+        }
+
+        if (!IsCardExposed(card)) return;
+
+        _dragCard = card;
+        _dragStartPos = card.GlobalPosition;
+        _dragOffset = card.GlobalPosition - pos;
+        card.ZIndex = 200;
+        card.Modulate = new Color(0.7f, 1f, 0.7f);
+    }
+
+    private void UpdateDrag(Vector2 pos)
+    {
+        if (_dragCard != null)
+            _dragCard.GlobalPosition = pos + _dragOffset;
+    }
+
+    private void EndDrag(Vector2 pos)
+    {
+        if (_dragCard == null) return;
+
+        if (pos.DistanceTo(_dragMouseStartPos) < 10f) 
+        {
+             var cardToTap = _dragCard;
+             _dragCard = null; // Clear first so HandleTap/DrawFromStock can move it
+             HandleTap(cardToTap);
+             return;
+        }
+
+        if (_dragCard.Rank == Rank.King)
+        {
+            RemoveCard(_dragCard);
+            UpdateGameState();
+            _dragCard = null;
+            return;
+        }
+
+        var targetCard = GetCardAt(pos, _dragCard);
+        bool matched = false;
+
+        if (targetCard != null && IsCardExposed(targetCard))
+        {
+            if (PyramidEngine.IsValidPair(GetModel(_dragCard), GetModel(targetCard)))
             {
-                if (PyramidEngine.IsExposed(kvp.Key.r, kvp.Key.c, _state))
-                {
-                    GD.Print($"Clicked Pyramid Card: {kvp.Value.Rank} of {kvp.Value.Suit}");
-                    SelectCard(kvp.Value, kvp.Key);
-                    return;
-                }
+                RemoveCard(_dragCard);
+                RemoveCard(targetCard);
+                matched = true;
             }
         }
 
-        // Check Waste
-        if (_wasteCards.Count > 0 && IsPointInCard(pos, _wasteCards[^1].GlobalPosition))
+        if (!matched)
         {
-            GD.Print($"Clicked Waste Card: {_wasteCards[^1].Rank}");
-            SelectCard(_wasteCards[^1], null);
-            return;
+            _dragCard.GlobalPosition = _dragStartPos;
+            _dragCard.ZIndex = (_dragCard.GetParent() as CardPile)?.Cards.IndexOf(_dragCard) ?? 0;
+            if (_dragCard != _selectedCard) _dragCard.Modulate = Colors.White;
+        }
+        else
+        {
+            UpdateGameState();
         }
 
-        // Check Stock
-        if (IsPointInCard(pos, GetNode<Node2D>("Stock").GlobalPosition))
+        _dragCard = null;
+    }
+
+    private void HandleTap(Card card)
+    {
+        if (card.CurrentPile == _stockPile)
         {
-            GD.Print("Clicked Stock");
             DrawFromStock();
             return;
         }
-    }
 
-    private void SelectCard(Card card, (int r, int c)? pyramidPos)
-    {
         if (card.Rank == Rank.King)
         {
-            RemoveCard(card, pyramidPos);
+            RemoveCard(card);
+            _selectedCard = null;
             UpdateGameState();
-            return;
         }
-
-        if (_selectedCard == null)
+        else if (_selectedCard == null)
         {
             _selectedCard = card;
             card.Modulate = new Color(0.7f, 1f, 0.7f);
@@ -215,17 +318,10 @@ public partial class PyramidView : Node2D
         }
         else
         {
-            var modelA = new CardModel(_selectedCard.Suit, _selectedCard.Rank);
-            var modelB = new CardModel(card.Suit, card.Rank);
-
-            if (PyramidEngine.IsValidPair(modelA, modelB))
+            if (PyramidEngine.IsValidPair(GetModel(_selectedCard), GetModel(card)))
             {
-                // Find pyramid pos for _selectedCard if it was from pyramid
-                (int r, int c)? posA = null;
-                foreach(var kvp in _pyramidCards) if(kvp.Value == _selectedCard) { posA = kvp.Key; break; }
-
-                RemoveCard(_selectedCard, posA);
-                RemoveCard(card, pyramidPos);
+                RemoveCard(_selectedCard);
+                RemoveCard(card);
                 _selectedCard = null;
                 UpdateGameState();
             }
@@ -236,61 +332,151 @@ public partial class PyramidView : Node2D
                 card.Modulate = new Color(0.7f, 1f, 0.7f);
             }
         }
-    }
-
-    private void RemoveCard(Card card, (int r, int c)? pyramidPos)
-    {
-        if (pyramidPos.HasValue)
+        
+        if (_dragCard == card) 
         {
-            _state.Pyramid[pyramidPos.Value.r][pyramidPos.Value.c] = null;
-            _pyramidCards.Remove(pyramidPos.Value);
+            _dragCard.GlobalPosition = _dragStartPos;
+            _dragCard = null;
         }
-        else if (_wasteCards.Contains(card))
-        {
-            _state.Waste.RemoveAt(_state.Waste.Count - 1);
-            _wasteCards.Remove(card);
-        }
-        card.QueueFree();
     }
 
     private void DrawFromStock()
     {
         if (_state.Stock.Count > 0)
         {
+            if (_selectedCard != null && IsPyramidCard(_selectedCard))
+            {
+                var stockModel = _state.Stock[^1];
+                if (PyramidEngine.IsValidPair(GetModel(_selectedCard), stockModel))
+                {
+                    RemoveCard(_selectedCard);
+                    _state.Stock.RemoveAt(_state.Stock.Count - 1);
+                    _stockPile.RemoveTopCard()?.QueueFree();
+                    _selectedCard = null;
+                    UpdateGameState();
+                    return;
+                }
+            }
+
             var model = _state.Stock[^1];
             _state.Stock.RemoveAt(_state.Stock.Count - 1);
             _state.Waste.Add(model);
             
-            var card = _stockCards[^1];
-            _stockCards.RemoveAt(_stockCards.Count - 1);
-            card.Reparent(GetNode("Waste"));
-            card.Position = Vector2.Zero;
-            _wasteCards.Add(card);
+            var card = _stockPile.RemoveTopCard()!;
+            card.IsFaceUp = true;
+            _wastePile.AddCard(card);
         }
-        else if (_state.DeckPasses < 2) // Total 3 passes (initial + 2 recycles)
+        else if (_state.DeckPasses < 2)
         {
             _state.DeckPasses++;
             _state.Stock = _state.Waste.AsEnumerable().Reverse().ToList();
             _state.Waste.Clear();
             ApplyState(_state);
         }
-        
         UpdateGameState();
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private bool IsCardExposed(Card card)
+    {
+        if (card.CurrentPile == _stockPile) return card == _stockPile.TopCard;
+        if (card.CurrentPile == _wastePile) return card == _wastePile.TopCard;
+        
+        var pos = GetPyramidPos(card);
+        if (pos == null) return false;
+        return PyramidEngine.IsExposed(pos.Value.r, pos.Value.c, _state);
+    }
+
+    private (int r, int c)? GetPyramidPos(Card card)
+    {
+        foreach (var kvp in _pyramidCards) if (kvp.Value == card) return kvp.Key;
+        return null;
+    }
+
+    private bool IsPyramidCard(Card card) => GetPyramidPos(card) != null;
+
+    private CardModel GetModel(Card card) => new CardModel(card.Suit, card.Rank);
+
+    private void RemoveCard(Card card)
+    {
+        var pPos = GetPyramidPos(card);
+        if (pPos.HasValue)
+        {
+            _state.Pyramid[pPos.Value.r][pPos.Value.c] = null;
+            _pyramidCards.Remove(pPos.Value);
+        }
+        else if (card.CurrentPile == _stockPile)
+        {
+            _state.Stock.RemoveAt(_state.Stock.Count - 1);
+            _stockPile.RemoveTopCard();
+        }
+        else if (card.CurrentPile == _wastePile)
+        {
+            _state.Waste.RemoveAt(_state.Waste.Count - 1);
+            _wastePile.RemoveTopCard();
+        }
+        card.QueueFree();
+    }
+
+    private Card? GetCardAt(Vector2 pos, Card? ignoreCard = null)
+    {
+        foreach (var card in _pyramidCards.Values.Reverse())
+        {
+            if (card == ignoreCard) continue;
+            if (IsPointInCard(pos, card.GlobalPosition)) return card;
+        }
+
+        if (!_wastePile.IsEmpty && _wastePile.TopCard != ignoreCard && IsPointInCard(pos, _wastePile.TopCard.GlobalPosition)) return _wastePile.TopCard;
+        if (!_stockPile.IsEmpty && _stockPile.TopCard != ignoreCard && IsPointInCard(pos, _stockPile.TopCard.GlobalPosition)) return _stockPile.TopCard;
+        
+        return null;
     }
 
     private void UpdateGameState()
     {
-        UpdateVisuals();
+        UpdateCardVisuals();
         SaveManager.SaveGame("Pyramid", _state);
-        if (PyramidEngine.IsWon(_state))
-        {
-            GD.Print("YOU WON PYRAMID!");
-        }
+        if (PyramidEngine.IsWon(_state)) EnterWinState();
     }
 
-    private void UpdateVisuals()
+    private void UpdateCardVisuals()
     {
-        // Update Z-indices or labels if needed
+        // Pyramid cards: White if exposed, Dimmed if covered
+        foreach (var card in _pyramidCards.Values)
+            card.Modulate = IsCardExposed(card) ? Colors.White : new Color(0.5f, 0.5f, 0.5f);
+        
+        // Stock cards: Reset to white
+        foreach (var card in _stockPile.Cards)
+            card.Modulate = Colors.White;
+
+        // Waste cards: Reset to white
+        foreach (var card in _wastePile.Cards)
+            card.Modulate = Colors.White;
+
+        // Apply selection highlight
+        if (_selectedCard != null) 
+            _selectedCard.Modulate = new Color(0.7f, 1f, 0.7f);
+    }
+
+    private void EnterWinState()
+    {
+        _gameWon = true;
+        _winOverlay = new CanvasLayer { Layer = 5 };
+        AddChild(_winOverlay);
+        var vpSize = GetViewport().GetVisibleRect().Size;
+        var band = new ColorRect { Color = new Color(0, 0, 0, 0.45f), Position = new Vector2(0, vpSize.Y / 2 - 50), Size = new Vector2(vpSize.X, 100) };
+        _winOverlay.AddChild(band);
+        var lbl = new Label { Text = "You Won!", HorizontalAlignment = HorizontalAlignment.Center, Size = new Vector2(vpSize.X, 80), Position = new Vector2(0, vpSize.Y / 2 - 40) };
+        lbl.AddThemeFontSizeOverride("font_size", 52);
+        _winOverlay.AddChild(lbl);
+    }
+
+    private void ExitWinState()
+    {
+        _gameWon = false;
+        _winOverlay?.QueueFree();
+        _winOverlay = null;
     }
 
     private static bool IsPointInCard(Vector2 point, Vector2 center) =>
