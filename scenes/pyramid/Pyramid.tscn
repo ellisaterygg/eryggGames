@@ -1,0 +1,19 @@
+[gd_scene load_steps=2 format=3 uid="uid://cy8p2m1q2w3e4"]
+
+[ext_resource type="Script" path="res://scripts/Pyramid/PyramidView.cs" id="Pyramid_Script"]
+
+[node name="Pyramid" type="Node2D"]
+script = ExtResource("Pyramid_Script")
+
+[node name="Background" type="Sprite2D" parent="."]
+z_index = -1
+modulate = Color(0.65, 0.65, 0.65, 1)
+
+[node name="PyramidContainer" type="Node2D" parent="."]
+position = Vector2(360, 200)
+
+[node name="Stock" type="Node2D" parent="."]
+position = Vector2(150, 1000)
+
+[node name="Waste" type="Node2D" parent="."]
+position = Vector2(300, 1000)

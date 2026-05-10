@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://col1kt5oumka3"]
 
-[ext_resource type="Script" uid="uid://jxamxbsofe1p" path="res://scripts/freecell/CardPile.cs" id="CardPile_Script"]
-[ext_resource type="Script" uid="uid://bvs5yo4c5n0r4" path="res://scripts/freecell/FreeCell.cs" id="FreeCell_Script"]
+[ext_resource type="Script" path="res://scripts/Shared/CardPile.cs" id="CardPile_Script"]
+[ext_resource type="Script" path="res://scripts/FreeCell/FreeCellView.cs" id="FreeCell_Script"]
 
 [node name="FreeCell" type="Node2D"]
 script = ExtResource("FreeCell_Script")

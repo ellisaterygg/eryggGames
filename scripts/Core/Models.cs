@@ -1,4 +1,4 @@
-namespace EryggGames.FreeCell.Core;
+namespace EryggGames.Core;
 
 public enum Suit { Clubs, Diamonds, Hearts, Spades }
 

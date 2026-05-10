@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using EryggGames.Core;
 using EryggGames.FreeCell.Core;
 
 namespace EryggGames.FreeCell.Tests;
@@ -26,12 +27,12 @@ public static class EngineTests
 
 	private static void TestMaxMovable()
 	{
-		var state = new GameState();
-
+		var state = new FreeCellState();
+		
 		// Fill all tableau columns so none are empty
 		for (int i = 0; i < 8; i++)
 			state.Tableau[i].Add(new CardModel(Suit.Clubs, Rank.King));
-
+		
 		// Fill all free cells so none are empty
 		for (int i = 0; i < 4; i++)
 			state.FreeCells[i].Add(new CardModel(Suit.Diamonds, Rank.King));
@@ -42,14 +43,15 @@ public static class EngineTests
 		// 1 free cell empty: (1+1) * 2^0 = 2
 		state.FreeCells[0].Clear();
 		Assert(FreeCellEngine.CalculateMaxMovable(state) == 2, "MaxMovable 1 free cell empty");
-
+		
 		// 1 empty column: (1+1) * 2^1 = 4
 		state.Tableau[0].Clear();
 		Assert(FreeCellEngine.CalculateMaxMovable(state) == 4, "MaxMovable 1 cell + 1 col empty");
 	}
+
 	private static void TestCanMoveTableau()
 	{
-		var state = new GameState();
+		var state = new FreeCellState();
 		state.Tableau[0].Add(new CardModel(Suit.Spades, Rank.Ten));
 		
 		var moving = new List<CardModel> { new CardModel(Suit.Hearts, Rank.Nine) };
@@ -64,7 +66,7 @@ public static class EngineTests
 
 	private static void TestCanMoveFoundation()
 	{
-		var state = new GameState();
+		var state = new FreeCellState();
 		var ace = new List<CardModel> { new CardModel(Suit.Hearts, Rank.Ace) };
 		Assert(FreeCellEngine.CanMove(state, ace, PileType.Foundation, 0).IsValid, "Ace to empty foundation");
 

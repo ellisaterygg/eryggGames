@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using EryggGames.Core;
 
 namespace EryggGames.FreeCell.Core;
 
@@ -19,7 +20,7 @@ public static class FreeCellEngine
 		return true;
 	}
 
-	public static int CalculateMaxMovable(GameState state, int? excludeTableauIndex = null, int? destinationTableauIndex = null)
+	public static int CalculateMaxMovable(FreeCellState state, int? excludeTableauIndex = null, int? destinationTableauIndex = null)
 	{
 		int emptyCells = state.FreeCells.Count(p => p.Count == 0);
 		int emptyCols = 0;
@@ -33,7 +34,7 @@ public static class FreeCellEngine
 		return (emptyCells + 1) * (int)Math.Pow(2, Math.Max(0, emptyCols));
 	}
 
-	public static MoveResult CanMove(GameState state, IReadOnlyList<CardModel> movingCards, PileType targetType, int targetIndex)
+	public static MoveResult CanMove(FreeCellState state, IReadOnlyList<CardModel> movingCards, PileType targetType, int targetIndex)
 	{
 		if (movingCards.Count == 0) return new MoveResult(false, "No cards to move.");
 
@@ -78,12 +79,12 @@ public static class FreeCellEngine
 		}
 	}
 
-	public static bool IsWon(GameState state)
+	public static bool IsWon(FreeCellState state)
 	{
 		return state.Foundations.All(f => f.Count == 13);
 	}
 
-	public static bool CanAutoComplete(GameState state)
+	public static bool CanAutoComplete(FreeCellState state)
 	{
 		var tempState = state.Clone();
 		bool progress = true;

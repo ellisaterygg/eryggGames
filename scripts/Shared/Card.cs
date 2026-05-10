@@ -1,18 +1,17 @@
 using Godot;
-using EryggGames.FreeCell.Core;
+using EryggGames.Core;
 
-namespace EryggGames.FreeCell;
+namespace EryggGames.Shared;
 
 public partial class Card : Node2D
 {
-	public const float CardWidth  = 80f;
-	public const float CardHeight = 112f;
+    public const float CardWidth  = 80f;
+    public const float CardHeight = 112f;
 
-	public Suit Suit { get; private set; }
-	public Rank Rank { get; private set; }
-	public bool IsRed => Suit == Suit.Hearts || Suit == Suit.Diamonds;
-	public CardPile CurrentPile { get; set; }
-
+    public Suit Suit { get; private set; }
+    public Rank Rank { get; private set; }
+    public bool IsRed => Suit == Suit.Hearts || Suit == Suit.Diamonds;
+    public CardPile CurrentPile { get; set; }
 	private string _rankText;
 	private Color  _suitColor;
 

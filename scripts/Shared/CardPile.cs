@@ -1,8 +1,8 @@
 using Godot;
 using System.Collections.Generic;
-using EryggGames.FreeCell.Core;
+using EryggGames.Core;
 
-namespace EryggGames.FreeCell;
+namespace EryggGames.Shared;
 
 public partial class CardPile : Node2D
 {
