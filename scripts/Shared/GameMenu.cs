@@ -6,9 +6,9 @@ namespace EryggGames.Shared;
 
 public class GameOption
 {
-    public string Id { get; set; }
-    public string Label { get; set; }
-    public string[] Options { get; set; }
+    public string Id { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public string[] Options { get; set; } = Array.Empty<string>();
     public int SelectedIndex { get; set; }
 }
 
@@ -20,12 +20,12 @@ public partial class GameMenu : CanvasLayer
     [Signal] public delegate void GamesRequestedEventHandler();
     [Signal] public delegate void OptionsAppliedEventHandler(bool startNewGame);
 
-    private Control _optionsOverlay;
-    private VBoxContainer _optionsContainer;
+    private Control _optionsOverlay = null!;
+    private VBoxContainer _optionsContainer = null!;
     private List<GameOption> _currentOptions = new();
-    private Dictionary<string, OptionButton> _optionButtons = new();
+    private Dictionary<string, List<CheckBox>> _optionRadioGroups = new();
 
-    private Button _undoBtn;
+    private Button _undoBtn = null!;
 
     public void Setup(float topInset, bool showUndo = true)
     {
@@ -76,7 +76,7 @@ public partial class GameMenu : CanvasLayer
         _optionsOverlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_optionsOverlay);
 
-        var dim = new ColorRect { Color = new Color(0, 0, 0, 0.6f) };
+        var dim = new ColorRect { Color = new Color(0, 0, 0, 0.85f) };
         dim.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _optionsOverlay.AddChild(dim);
 
@@ -85,42 +85,48 @@ public partial class GameMenu : CanvasLayer
         _optionsOverlay.AddChild(center);
 
         var panel = new PanelContainer {
-            CustomMinimumSize = new Vector2(500, 0),
+            CustomMinimumSize = new Vector2(600, 0),
         };
         center.AddChild(panel);
 
         var margin = new MarginContainer();
-        margin.AddThemeConstantOverride("margin_top", 20);
-        margin.AddThemeConstantOverride("margin_bottom", 20);
-        margin.AddThemeConstantOverride("margin_left", 20);
-        margin.AddThemeConstantOverride("margin_right", 20);
+        margin.AddThemeConstantOverride("margin_top", 30);
+        margin.AddThemeConstantOverride("margin_bottom", 30);
+        margin.AddThemeConstantOverride("margin_left", 30);
+        margin.AddThemeConstantOverride("margin_right", 30);
         panel.AddChild(margin);
 
         var vBox = new VBoxContainer();
+        vBox.AddThemeConstantOverride("separation", 20);
         margin.AddChild(vBox);
 
         var title = new Label { Text = "Game Options", HorizontalAlignment = HorizontalAlignment.Center };
-        title.AddThemeFontSizeOverride("font_size", 32);
+        title.AddThemeFontSizeOverride("font_size", 36);
         vBox.AddChild(title);
         vBox.AddChild(new HSeparator());
 
         _optionsContainer = new VBoxContainer();
+        _optionsContainer.AddThemeConstantOverride("separation", 15);
         vBox.AddChild(_optionsContainer);
 
         vBox.AddChild(new HSeparator());
 
         var btnHBox = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        btnHBox.AddThemeConstantOverride("separation", 20);
         vBox.AddChild(btnHBox);
 
-        var applyNowBtn = new Button { Text = "Apply & New Game" };
+        var applyNowBtn = new Button { Text = "Apply & New Game", CustomMinimumSize = new Vector2(180, 60) };
+        applyNowBtn.AddThemeFontSizeOverride("font_size", 20);
         applyNowBtn.Pressed += () => ApplyOptions(true);
         btnHBox.AddChild(applyNowBtn);
 
-        var applyNextBtn = new Button { Text = "Apply to Next" };
+        var applyNextBtn = new Button { Text = "Apply to Next", CustomMinimumSize = new Vector2(180, 60) };
+        applyNextBtn.AddThemeFontSizeOverride("font_size", 20);
         applyNextBtn.Pressed += () => ApplyOptions(false);
         btnHBox.AddChild(applyNextBtn);
 
-        var cancelBtn = new Button { Text = "Cancel" };
+        var cancelBtn = new Button { Text = "Cancel", CustomMinimumSize = new Vector2(120, 60) };
+        cancelBtn.AddThemeFontSizeOverride("font_size", 20);
         cancelBtn.Pressed += HideOptions;
         btnHBox.AddChild(cancelBtn);
     }
@@ -129,22 +135,40 @@ public partial class GameMenu : CanvasLayer
     {
         _currentOptions = options;
         foreach (Node child in _optionsContainer.GetChildren()) child.QueueFree();
-        _optionButtons.Clear();
+        _optionRadioGroups.Clear();
+
+        var buttonGroup = new ButtonGroup();
 
         foreach (var opt in options)
         {
-            var hBox = new HBoxContainer();
-            _optionsContainer.AddChild(hBox);
+            var optVBox = new VBoxContainer();
+            _optionsContainer.AddChild(optVBox);
 
-            var label = new Label { Text = opt.Label, CustomMinimumSize = new Vector2(150, 0) };
-            hBox.AddChild(label);
+            var label = new Label { Text = opt.Label };
+            label.AddThemeFontSizeOverride("font_size", 24);
+            optVBox.AddChild(label);
 
-            var combo = new OptionButton { CustomMinimumSize = new Vector2(200, 0) };
-            foreach (var o in opt.Options) combo.AddItem(o);
-            combo.Selected = opt.SelectedIndex;
-            hBox.AddChild(combo);
+            var radioHBox = new HBoxContainer();
+            radioHBox.AddThemeConstantOverride("separation", 25);
+            optVBox.AddChild(radioHBox);
 
-            _optionButtons[opt.Id] = combo;
+            var checkboxes = new List<CheckBox>();
+            var group = new ButtonGroup(); // Each option row gets its own group
+
+            for (int i = 0; i < opt.Options.Length; i++)
+            {
+                var cb = new CheckBox 
+                { 
+                    Text = opt.Options[i],
+                    ButtonGroup = group,
+                    ButtonPressed = (i == opt.SelectedIndex)
+                };
+                cb.AddThemeFontSizeOverride("font_size", 22);
+                radioHBox.AddChild(cb);
+                checkboxes.Add(cb);
+            }
+
+            _optionRadioGroups[opt.Id] = checkboxes;
         }
     }
 
@@ -165,9 +189,16 @@ public partial class GameMenu : CanvasLayer
     {
         foreach (var opt in _currentOptions)
         {
-            if (_optionButtons.TryGetValue(opt.Id, out var combo))
+            if (_optionRadioGroups.TryGetValue(opt.Id, out var checkboxes))
             {
-                opt.SelectedIndex = combo.Selected;
+                for (int i = 0; i < checkboxes.Count; i++)
+                {
+                    if (checkboxes[i].ButtonPressed)
+                    {
+                        opt.SelectedIndex = i;
+                        break;
+                    }
+                }
             }
         }
         HideOptions();
