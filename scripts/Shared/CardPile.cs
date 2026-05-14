@@ -16,7 +16,18 @@ public partial class CardPile : Node2D
     public int Count => Cards.Count;
     public bool IsEmpty => Cards.Count == 0;
 
-    public Rect2 GetGlobalRect() => new Rect2(GlobalPosition - new Vector2(Card.CardWidth / 2, Card.CardHeight / 2), Card.CardWidth, Card.CardHeight);
+    public Rect2 GetGlobalRect()
+    {
+        float width = Card.CardWidth;
+        float height = Card.CardHeight;
+        
+        if (PileType == PileType.Tableau && Cards.Count > 1)
+        {
+            height += (Cards.Count - 1) * CardOffset;
+        }
+
+        return new Rect2(GlobalPosition - new Vector2(width / 2, Card.CardHeight / 2), width, height);
+    }
 
     public void AddCard(Card card)
     {

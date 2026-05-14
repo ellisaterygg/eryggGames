@@ -1,36 +1,36 @@
-#nullable enable
 using System.Collections.Generic;
 using System.Linq;
 using EryggGames.Core;
 
-namespace EryggGames.Pyramid.Core;
+namespace EryggGames.TriPeaks.Core;
 
-public class PyramidState
+public class TriPeaksState
 {
     public List<CardModel> InitialDeal { get; set; } = new List<CardModel>();
-    public CardModel?[][] Pyramid { get; set; } = new CardModel?[7][];
+    public CardModel?[][] Peaks { get; set; } = new CardModel?[4][];
     public List<CardModel> Stock { get; set; } = new List<CardModel>();
     public List<CardModel> Waste { get; set; } = new List<CardModel>();
-    public int DeckPasses { get; set; } = 0;
     public bool IsFinished { get; set; }
 
-    public PyramidState()
+    public TriPeaksState()
     {
-        for (int i = 0; i < 7; i++) Pyramid[i] = new CardModel?[i + 1];
+        Peaks[0] = new CardModel?[3];
+        Peaks[1] = new CardModel?[6];
+        Peaks[2] = new CardModel?[9];
+        Peaks[3] = new CardModel?[10];
     }
 
-    public PyramidState Clone()
+    public TriPeaksState Clone()
     {
-        var clone = new PyramidState();
+        var clone = new TriPeaksState();
         clone.InitialDeal = InitialDeal.ToList();
-        for (int i = 0; i < 7; i++)
+        for (int i = 0; i < 4; i++)
         {
-            for (int j = 0; j <= i; j++)
-                clone.Pyramid[i][j] = Pyramid[i][j];
+            for (int j = 0; j < Peaks[i].Length; j++)
+                clone.Peaks[i][j] = Peaks[i][j];
         }
         clone.Stock = Stock.ToList();
         clone.Waste = Waste.ToList();
-        clone.DeckPasses = DeckPasses;
         clone.IsFinished = IsFinished;
         return clone;
     }

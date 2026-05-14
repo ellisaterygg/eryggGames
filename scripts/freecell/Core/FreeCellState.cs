@@ -12,6 +12,7 @@ public class FreeCellState
     public List<CardModel>[] FreeCells { get; set; } = new List<CardModel>[4];
     public List<CardModel>[] Foundations { get; set; } = new List<CardModel>[4];
     public Suit?[] FoundationSuits { get; set; } = new Suit?[4];
+    public bool IsFinished { get; set; }
 
     public FreeCellState()
     {
@@ -27,6 +28,7 @@ public class FreeCellState
         for (int i = 0; i < 4; i++) clone.FreeCells[i] = FreeCells[i].ToList();
         for (int i = 0; i < 4; i++) clone.Foundations[i] = Foundations[i].ToList();
         for (int i = 0; i < 4; i++) clone.FoundationSuits[i] = FoundationSuits[i];
+        clone.IsFinished = IsFinished;
         return clone;
     }
 }

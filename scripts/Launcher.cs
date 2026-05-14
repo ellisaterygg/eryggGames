@@ -9,12 +9,16 @@ public partial class Launcher : Control
     private Control _menuLayer;
     private PackedScene _freeCellScene;
     private PackedScene _pyramidScene;
+    private PackedScene _triPeaksScene;
+    private PackedScene _klondikeScene;
 
     public override void _Ready()
     {
         MouseFilter = MouseFilterEnum.Ignore;
         _freeCellScene = GD.Load<PackedScene>("res://scenes/freecell/FreeCell.tscn");
         _pyramidScene = GD.Load<PackedScene>("res://scenes/pyramid/Pyramid.tscn");
+        _triPeaksScene = GD.Load<PackedScene>("res://scenes/tripeaks/TriPeaks.tscn");
+        _klondikeScene = GD.Load<PackedScene>("res://scenes/klondike/Klondike.tscn");
 
         SetupUI();
     }
@@ -45,8 +49,10 @@ public partial class Launcher : Control
         };
         _menuLayer.AddChild(vBox);
 
+        vBox.AddChild(MakeGameButton("Klondike", () => SwitchGame("Klondike")));
         vBox.AddChild(MakeGameButton("FreeCell", () => SwitchGame("FreeCell")));
         vBox.AddChild(MakeGameButton("Pyramid", () => SwitchGame("Pyramid")));
+        vBox.AddChild(MakeGameButton("TriPeaks", () => SwitchGame("TriPeaks")));
     }
 
     private Button MakeGameButton(string text, Action onPressed)
@@ -76,8 +82,10 @@ public partial class Launcher : Control
 
         PackedScene scene = gameName switch
         {
+            "Klondike" => _klondikeScene,
             "FreeCell" => _freeCellScene,
             "Pyramid" => _pyramidScene,
+            "TriPeaks" => _triPeaksScene,
             _ => null
         };
 
@@ -86,10 +94,6 @@ public partial class Launcher : Control
             _menuLayer.Visible = false;
             _currentGame = scene.Instantiate();
             AddChild(_currentGame);
-        }
-        else if (gameName == "Pyramid")
-        {
-            GD.Print("Pyramid not implemented yet!");
         }
     }
 }

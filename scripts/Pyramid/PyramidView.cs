@@ -1,4 +1,3 @@
-#nullable enable
 using Godot;
 using System;
 using System.Collections.Generic;
@@ -9,41 +8,28 @@ using EryggGames.Pyramid.Core;
 
 namespace EryggGames.Pyramid;
 
-public partial class PyramidView : Node2D
+public partial class PyramidView : BaseGameView
 {
+	private CardPile _stockPile;
+	private CardPile _wastePile;
+	private Dictionary<(int r, int c), Card> _pyramidCards = new();
 	private PyramidState _state = new();
-	private PackedScene _cardScene = null!;
-	
-	private readonly Dictionary<(int r, int c), Card> _pyramidCards = new();
-	private CardPile _stockPile = null!;
-	private CardPile _wastePile = null!;
+	private PackedScene _cardScene;
 
-	private Card? _selectedCard;
-	private float _topInset;
-	
 	// Drag state
-	private Card?   _dragCard;
+	private readonly List<Card> _dragCards = new();
+	private CardPile? _dragOriginPile;
 	private Vector2 _dragOffset;
-	private Vector2 _dragStartPos;
-	private Vector2 _dragMouseStartPos;
-	private bool    _gameWon;
-	private CanvasLayer? _winOverlay;
 
-	public override void _Ready()
+	protected override void SetupGame()
 	{
 		_cardScene = GD.Load<PackedScene>("res://scenes/Shared/Card.tscn");
-		_topInset = GetTopSafeInset();
-		
-		GetNode<Node2D>("PyramidContainer").Position += new Vector2(0, _topInset);
-		
 		SetupPiles();
-		SetupMenu();
-		
+
 		var saved = SaveManager.LoadGame<PyramidState>("Pyramid");
-		if (saved != null)
+		if (saved != null && !saved.IsFinished)
 		{
 			ApplyState(saved);
-			LoadBackground(); 
 		}
 		else
 		{
@@ -51,16 +37,11 @@ public partial class PyramidView : Node2D
 		}
 	}
 
-	private float GetTopSafeInset()
-	{
-		var screenH = (float)DisplayServer.ScreenGetSize().Y;
-		var safeTopPx = (float)DisplayServer.GetDisplaySafeArea().Position.Y;
-		if (safeTopPx <= 0f || screenH <= 0f) return 0f;
-		return safeTopPx / screenH * GetViewport().GetVisibleRect().Size.Y;
-	}
+	protected override bool ShowUndoButton => false;
 
 	private void SetupPiles()
 	{
+		var safeOffset = new Vector2(0, _topInset);
 		var stockNode = GetNode<Node2D>("Stock");
 		_stockPile = new CardPile { Name = "StockPile", PileType = PileType.FreeCell };
 		stockNode.AddChild(_stockPile);
@@ -69,43 +50,13 @@ public partial class PyramidView : Node2D
 		_wastePile = new CardPile { Name = "WastePile", PileType = PileType.FreeCell };
 		wasteNode.AddChild(_wastePile);
 		
-		stockNode.Position = new Vector2(200, 1100);
-		wasteNode.Position = new Vector2(400, 1100);
+		stockNode.Position = new Vector2(200, 1100) + safeOffset;
+		wasteNode.Position = new Vector2(400, 1100) + safeOffset;
+
+		GetNode<Node2D>("PyramidContainer").Position += safeOffset;
 	}
 
-	private void SetupMenu()
-	{
-		var layer = new CanvasLayer();
-		AddChild(layer);
-		float barH = 95f + _topInset;
-		var bar = new ColorRect { Color = new Color(0, 0, 0, 0.5f), Size = new Vector2(720, barH) };
-		layer.AddChild(bar);
-
-		float btnY = _topInset + 22f;
-		bar.AddChild(MakeMenuButton("New",     new Vector2(30,  btnY), NewGame));
-		bar.AddChild(MakeMenuButton("Restart", new Vector2(200, btnY), RestartGame));
-		bar.AddChild(MakeMenuButton("Games",   new Vector2(540, btnY), ShowGameSelection));
-	}
-
-	private Button MakeMenuButton(string text, Vector2 pos, Action handler)
-	{
-		var btn = new Button { Text = text, Position = pos, Size = new Vector2(130, 52) };
-		btn.AddThemeFontSizeOverride("font_size", 20);
-		btn.Pressed += handler;
-		return btn;
-	}
-
-	private void ShowGameSelection()
-	{
-		GetParent<Launcher>()?.SwitchGame("Launcher");
-	}
-
-	private void LoadBackground()
-	{
-		BackgroundManager.LoadRandomBackground(GetNode<Sprite2D>("Background"));
-	}
-
-	private void NewGame()
+	protected override void NewGame()
 	{
 		ExitWinState();
 		LoadBackground();
@@ -114,7 +65,7 @@ public partial class PyramidView : Node2D
 		DealFromOrder(_state.InitialDeal);
 	}
 
-	private void RestartGame()
+	protected override void RestartGame()
 	{
 		ExitWinState();
 		if (_state.InitialDeal.Count == 0) NewGame();
@@ -157,6 +108,7 @@ public partial class PyramidView : Node2D
 				var card = CreateCard(model);
 				container.AddChild(card);
 				card.Position = GetPyramidPosition(r, c);
+				card.IsFaceUp = true;
 				_pyramidCards[(r, c)] = card;
 			}
 		}
@@ -164,7 +116,7 @@ public partial class PyramidView : Node2D
 		foreach (var model in _state.Stock)
 		{
 			var card = CreateCard(model);
-			card.IsFaceUp = true; // Fix: Show the cards so player knows they can match
+			card.IsFaceUp = false;
 			_stockPile.AddCard(card);
 		}
 
@@ -176,6 +128,7 @@ public partial class PyramidView : Node2D
 		}
 		
 		UpdateCardVisuals();
+		_gameWon = _state.IsFinished;
 	}
 
 	private Card CreateCard(CardModel model)
@@ -191,14 +144,14 @@ public partial class PyramidView : Node2D
 		_pyramidCards.Clear();
 		while (!_stockPile.IsEmpty) _stockPile.RemoveTopCard()?.QueueFree();
 		while (!_wastePile.IsEmpty) _wastePile.RemoveTopCard()?.QueueFree();
-		_selectedCard = null;
 	}
 
 	private Vector2 GetPyramidPosition(int r, int c)
 	{
-		float xOffset = (c - r / 2.0f) * (Card.CardWidth + 10);
-		float yOffset = r * (Card.CardHeight * 0.45f);
-		return new Vector2(xOffset, yOffset);
+		float hSpacing = Card.CardWidth * 1.1f;
+		float vSpacing = Card.CardHeight * 0.4f;
+		float rowStartX = -(r * hSpacing) / 2f;
+		return new Vector2(rowStartX + c * hSpacing, r * vSpacing);
 	}
 
 	// ── Input ──────────────────────────────────────────────────────────────
@@ -210,20 +163,19 @@ public partial class PyramidView : Node2D
 		switch (@event)
 		{
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } mb:
-				BeginDrag(mb.Position);
+				BeginDrag(mb.GlobalPosition);
 				break;
-			case InputEventMouseMotion mm when _dragCard != null:
-				UpdateDrag(mm.Position);
+			case InputEventMouseMotion mm when _dragCards.Count > 0:
+				UpdateDrag(mm.GlobalPosition);
 				break;
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false } mb:
-				if (_dragCard != null) EndDrag(mb.Position);
+				if (_dragCards.Count > 0) EndDrag(mb.GlobalPosition);
 				break;
 		}
 	}
 
 	private void BeginDrag(Vector2 pos)
 	{
-		_dragMouseStartPos = pos;
 		var card = GetCardAt(pos);
 		if (card == null)
 		{
@@ -232,118 +184,99 @@ public partial class PyramidView : Node2D
 			return;
 		}
 
-		if (!IsCardExposed(card)) return;
-
-		_dragCard = card;
-		_dragStartPos = card.GlobalPosition;
-		_dragOffset = card.GlobalPosition - pos;
-		card.ZIndex = 200;
-		card.Modulate = new Color(0.7f, 1f, 0.7f);
-	}
-
-	private void UpdateDrag(Vector2 pos)
-	{
-		if (_dragCard != null)
-			_dragCard.GlobalPosition = pos + _dragOffset;
-	}
-
-	private void EndDrag(Vector2 pos)
-	{
-	    if (_dragCard == null) return;
-
-	    if (pos.DistanceTo(_dragMouseStartPos) < 10f) 
-	    {
-	         var cardToTap = _dragCard;
-	         _dragCard = null; 
-	         HandleTap(cardToTap);
-	         return;
-	    }
-
-	    if (_dragCard.Rank == Rank.King)
-	    {
-	        RemoveCard(_dragCard);
-	        UpdateGameState();
-	        _dragCard = null;
-	        return;
-	    }
-
-	    // --- NEW AREA-BASED HIT DETECTION ---
-	    var candidates = _pyramidCards.Values.Concat(_stockPile.IsEmpty ? new Card[0] : new[] { _stockPile.TopCard })
-	                                         .Concat(_wastePile.IsEmpty ? new Card[0] : new[] { _wastePile.TopCard })
-	                                         .Where(c => c != _dragCard && IsCardExposed(c))
-	                                         .ToList();
-
-	    var targetCard = OverlapUtils.GetMostOverlapping(_dragCard.GetGlobalRect(), candidates, c => c.GetGlobalRect());
-	    bool matched = false;
-
-	    if (targetCard != null)
-	    {
-	        if (PyramidEngine.IsValidPair(GetModel(_dragCard), GetModel(targetCard)))
-	        {
-	            RemoveCard(_dragCard);
-	            RemoveCard(targetCard);
-	            matched = true;
-	        }
-	    }
-		if (!matched)
-		{
-			_dragCard.GlobalPosition = _dragStartPos;
-			_dragCard.ZIndex = (_dragCard.GetParent() as CardPile)?.Cards.IndexOf(_dragCard) ?? 0;
-			if (_dragCard != _selectedCard) _dragCard.Modulate = Colors.White;
-		}
-		else
-		{
-			UpdateGameState();
-		}
-
-		_dragCard = null;
-	}
-
-	private void HandleTap(Card card)
-	{
 		if (card.CurrentPile == _stockPile)
 		{
 			DrawFromStock();
 			return;
 		}
 
+		if (!IsCardExposed(card)) return;
+
+		// King logic: remove immediately on click/start of drag
 		if (card.Rank == Rank.King)
 		{
 			RemoveCard(card);
-			_selectedCard = null;
 			UpdateGameState();
+			return;
 		}
-		else if (_selectedCard == null)
+
+		_dragOriginPile = card.CurrentPile;
+		var globalPos = card.GlobalPosition;
+		
+		card.Reparent(this);
+		card.Position = globalPos;
+		_dragOffset = globalPos - pos;
+		card.ZIndex = 100;
+		_dragCards.Add(card);
+	}
+
+	private void UpdateDrag(Vector2 pos)
+	{
+		_dragCards[0].Position = pos + _dragOffset;
+	}
+
+	private void EndDrag(Vector2 pos)
+	{
+		var dragCard = _dragCards[0];
+		
+		// Get all exposed cards that could be a match target
+		var candidates = _pyramidCards.Values
+			.Concat(new[] { _wastePile.TopCard })
+			.Where(c => c != null && c != dragCard && IsCardExposed(c))
+			.ToList();
+
+		var targetCard = OverlapUtils.GetMostOverlapping(dragCard.GetGlobalRect(), candidates, c => c.GetGlobalRect());
+
+		bool valid = false;
+		if (targetCard != null)
 		{
-			_selectedCard = card;
-			card.Modulate = new Color(0.7f, 1f, 0.7f);
-		}
-		else if (_selectedCard == card)
-		{
-			_selectedCard.Modulate = Colors.White;
-			_selectedCard = null;
-		}
-		else
-		{
-			if (PyramidEngine.IsValidPair(GetModel(_selectedCard), GetModel(card)))
+			if ((int)dragCard.Rank + (int)targetCard.Rank == 13)
 			{
-				RemoveCard(_selectedCard);
-				RemoveCard(card);
-				_selectedCard = null;
-				UpdateGameState();
+				RemoveCard(dragCard);
+				RemoveCard(targetCard);
+				valid = true;
+			}
+		}
+
+		if (!valid)
+		{
+			if (_dragOriginPile != null)
+			{
+				_dragOriginPile.AddCard(dragCard);
 			}
 			else
 			{
-				_selectedCard.Modulate = Colors.White;
-				_selectedCard = card;
-				card.Modulate = new Color(0.7f, 1f, 0.7f);
+				// If it was in the pyramid
+				GetNode("PyramidContainer").AddChild(dragCard);
+				var pPos = GetPyramidPos(dragCard);
+				if (pPos.HasValue) dragCard.Position = GetPyramidPosition(pPos.Value.r, pPos.Value.c);
 			}
 		}
-		
-		if (_dragCard == card) 
+
+		_dragCards.Clear();
+		_dragOriginPile = null;
+
+		if (valid)
 		{
-			_dragCard.GlobalPosition = _dragStartPos;
-			_dragCard = null;
+			UpdateGameState();
+		}
+	}
+
+	private void RemoveCard(Card card)
+	{
+		var pos = GetPyramidPos(card);
+		if (pos.HasValue)
+		{
+			_state.Pyramid[pos.Value.r][pos.Value.c] = null;
+			_pyramidCards.Remove(pos.Value);
+			card.QueueFree();
+		}
+		else if (card.CurrentPile == _wastePile || _dragOriginPile == _wastePile)
+		{
+			var model = GetModel(card);
+			_state.Waste.Remove(model);
+			if (card.CurrentPile == _wastePile) _wastePile.RemoveTopCard();
+			card.QueueFree();
 		}
 	}
 
@@ -351,45 +284,34 @@ public partial class PyramidView : Node2D
 	{
 		if (_state.Stock.Count > 0)
 		{
-			if (_selectedCard != null && IsPyramidCard(_selectedCard))
-			{
-				var stockModel = _state.Stock[^1];
-				if (PyramidEngine.IsValidPair(GetModel(_selectedCard), stockModel))
-				{
-					RemoveCard(_selectedCard);
-					_state.Stock.RemoveAt(_state.Stock.Count - 1);
-					_stockPile.RemoveTopCard()?.QueueFree();
-					_selectedCard = null;
-					UpdateGameState();
-					return;
-				}
-			}
-
 			var model = _state.Stock[^1];
 			_state.Stock.RemoveAt(_state.Stock.Count - 1);
 			_state.Waste.Add(model);
-			
 			var card = _stockPile.RemoveTopCard()!;
 			card.IsFaceUp = true;
 			_wastePile.AddCard(card);
+			UpdateGameState();
 		}
 		else if (_state.DeckPasses < 2)
 		{
 			_state.DeckPasses++;
-			_state.Stock = _state.Waste.AsEnumerable().Reverse().ToList();
-			_state.Waste.Clear();
-			ApplyState(_state);
+			while (_state.Waste.Count > 0)
+			{
+				var m = _state.Waste[^1];
+				_state.Waste.RemoveAt(_state.Waste.Count - 1);
+				_state.Stock.Add(m);
+				var c = _wastePile.RemoveTopCard()!;
+				c.IsFaceUp = false;
+				_stockPile.AddCard(c);
+			}
+			UpdateGameState();
 		}
-		UpdateGameState();
 	}
-
-	// ── Helpers ────────────────────────────────────────────────────────────
 
 	private bool IsCardExposed(Card card)
 	{
-		if (card.CurrentPile == _stockPile) return card == _stockPile.TopCard;
 		if (card.CurrentPile == _wastePile) return card == _wastePile.TopCard;
-		
+		if (card.CurrentPile == _stockPile) return card == _stockPile.TopCard;
 		var pos = GetPyramidPos(card);
 		if (pos == null) return false;
 		return PyramidEngine.IsExposed(pos.Value.r, pos.Value.c, _state);
@@ -401,52 +323,16 @@ public partial class PyramidView : Node2D
 		return null;
 	}
 
-	private bool IsPyramidCard(Card card) => GetPyramidPos(card) != null;
-
 	private CardModel GetModel(Card card) => new CardModel(card.Suit, card.Rank);
 
-	private void RemoveCard(Card card)
-	{
-		var pPos = GetPyramidPos(card);
-		if (pPos.HasValue)
-		{
-			_state.Pyramid[pPos.Value.r][pPos.Value.c] = null;
-			_pyramidCards.Remove(pPos.Value);
-		}
-		else if (card.CurrentPile == _stockPile)
-		{
-			_state.Stock.RemoveAt(_state.Stock.Count - 1);
-			_stockPile.RemoveTopCard();
-		}
-		else if (card.CurrentPile == _wastePile)
-		{
-			_state.Waste.RemoveAt(_state.Waste.Count - 1);
-			_wastePile.RemoveTopCard();
-		}
-		card.QueueFree();
-	}
-
-	private Card? GetCardAt(Vector2 pos, Card? ignoreCard = null, bool generous = false)
+	private Card? GetCardAt(Vector2 pos)
 	{
 		foreach (var card in _pyramidCards.Values.Reverse())
 		{
-			if (card == ignoreCard) continue;
-			bool hit = generous ? IsPointInDropZone(pos, card.GlobalPosition) : IsPointInCard(pos, card.GlobalPosition);
-			if (hit) return card;
+			if (IsPointInCard(pos, card.GlobalPosition)) return card;
 		}
-
-		if (!_wastePile.IsEmpty && _wastePile.TopCard != ignoreCard)
-		{
-			bool hit = generous ? IsPointInDropZone(pos, _wastePile.TopCard.GlobalPosition) : IsPointInCard(pos, _wastePile.TopCard.GlobalPosition);
-			if (hit) return _wastePile.TopCard;
-		}
-
-		if (!_stockPile.IsEmpty && _stockPile.TopCard != ignoreCard)
-		{
-			bool hit = generous ? IsPointInDropZone(pos, _stockPile.TopCard.GlobalPosition) : IsPointInCard(pos, _stockPile.TopCard.GlobalPosition);
-			if (hit) return _stockPile.TopCard;
-		}
-		
+		if (!_wastePile.IsEmpty && IsPointInCard(pos, _wastePile.TopCard.GlobalPosition)) return _wastePile.TopCard;
+		if (!_stockPile.IsEmpty && IsPointInCard(pos, _stockPile.TopCard.GlobalPosition)) return _stockPile.TopCard;
 		return null;
 	}
 
@@ -459,48 +345,15 @@ public partial class PyramidView : Node2D
 
 	private void UpdateCardVisuals()
 	{
-		// Pyramid cards: White if exposed, Dimmed if covered
-		foreach (var card in _pyramidCards.Values)
-			card.Modulate = IsCardExposed(card) ? Colors.White : new Color(0.5f, 0.5f, 0.5f);
-		
-		// Stock cards: Reset to white
-		foreach (var card in _stockPile.Cards)
-			card.Modulate = Colors.White;
-
-		// Waste cards: Reset to white
-		foreach (var card in _wastePile.Cards)
-			card.Modulate = Colors.White;
-
-		// Apply selection highlight
-		if (_selectedCard != null) 
-			_selectedCard.Modulate = new Color(0.7f, 1f, 0.7f);
-	}
-
-	private void EnterWinState()
-	{
-		_gameWon = true;
-		_winOverlay = new CanvasLayer { Layer = 5 };
-		AddChild(_winOverlay);
-		var vpSize = GetViewport().GetVisibleRect().Size;
-		var band = new ColorRect { Color = new Color(0, 0, 0, 0.45f), Position = new Vector2(0, vpSize.Y / 2 - 50), Size = new Vector2(vpSize.X, 100) };
-		_winOverlay.AddChild(band);
-		var lbl = new Label { Text = "You Won!", HorizontalAlignment = HorizontalAlignment.Center, Size = new Vector2(vpSize.X, 80), Position = new Vector2(0, vpSize.Y / 2 - 40) };
-		lbl.AddThemeFontSizeOverride("font_size", 52);
-		_winOverlay.AddChild(lbl);
-	}
-
-	private void ExitWinState()
-	{
-		_gameWon = false;
-		_winOverlay?.QueueFree();
-		_winOverlay = null;
+		foreach (var kvp in _pyramidCards)
+		{
+			var card = kvp.Value;
+			bool exposed = PyramidEngine.IsExposed(kvp.Key.r, kvp.Key.c, _state);
+			card.Modulate = exposed ? Colors.White : new Color(0.7f, 0.7f, 0.7f);
+		}
 	}
 
 	private static bool IsPointInCard(Vector2 point, Vector2 center) =>
 		Math.Abs(point.X - center.X) <= Card.CardWidth / 2 &&
 		Math.Abs(point.Y - center.Y) <= Card.CardHeight / 2;
-
-	private static bool IsPointInDropZone(Vector2 point, Vector2 center) =>
-		Math.Abs(point.X - center.X) <= Card.CardWidth * 0.8f &&
-		Math.Abs(point.Y - center.Y) <= Card.CardHeight * 0.9f;
 }

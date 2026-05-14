@@ -1,0 +1,68 @@
+[gd_scene format=3 uid="uid://klondike_1"]
+
+[ext_resource type="Script" path="res://scripts/Shared/CardPile.cs" id="CardPile_Script"]
+[ext_resource type="Script" path="res://scripts/Klondike/KlondikeView.cs" id="Klondike_Script"]
+
+[node name="Klondike" type="Node2D"]
+script = ExtResource("Klondike_Script")
+
+[node name="Background" type="Sprite2D" parent="."]
+position = Vector2(360, 640)
+z_index = -1
+modulate = Color(0.65, 0.65, 0.65, 1)
+
+[node name="Stock" type="Node2D" parent="."]
+position = Vector2(50, 160)
+script = ExtResource("CardPile_Script")
+
+[node name="Waste" type="Node2D" parent="."]
+position = Vector2(145, 160)
+script = ExtResource("CardPile_Script")
+
+[node name="Foundations" type="Node2D" parent="."]
+
+[node name="Foundation0" type="Node2D" parent="Foundations"]
+position = Vector2(405, 160)
+script = ExtResource("CardPile_Script")
+
+[node name="Foundation1" type="Node2D" parent="Foundations"]
+position = Vector2(495, 160)
+script = ExtResource("CardPile_Script")
+
+[node name="Foundation2" type="Node2D" parent="Foundations"]
+position = Vector2(585, 160)
+script = ExtResource("CardPile_Script")
+
+[node name="Foundation3" type="Node2D" parent="Foundations"]
+position = Vector2(675, 160)
+script = ExtResource("CardPile_Script")
+
+[node name="Tableau" type="Node2D" parent="."]
+
+[node name="Column0" type="Node2D" parent="Tableau"]
+position = Vector2(50, 300)
+script = ExtResource("CardPile_Script")
+
+[node name="Column1" type="Node2D" parent="Tableau"]
+position = Vector2(145, 300)
+script = ExtResource("CardPile_Script")
+
+[node name="Column2" type="Node2D" parent="Tableau"]
+position = Vector2(240, 300)
+script = ExtResource("CardPile_Script")
+
+[node name="Column3" type="Node2D" parent="Tableau"]
+position = Vector2(335, 300)
+script = ExtResource("CardPile_Script")
+
+[node name="Column4" type="Node2D" parent="Tableau"]
+position = Vector2(430, 300)
+script = ExtResource("CardPile_Script")
+
+[node name="Column5" type="Node2D" parent="Tableau"]
+position = Vector2(525, 300)
+script = ExtResource("CardPile_Script")
+
+[node name="Column6" type="Node2D" parent="Tableau"]
+position = Vector2(620, 300)
+script = ExtResource("CardPile_Script")

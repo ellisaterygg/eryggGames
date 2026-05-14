@@ -9,7 +9,7 @@ using EryggGames.FreeCell.Tests;
 
 namespace EryggGames.FreeCell;
 
-public partial class FreeCellView : Node2D
+public partial class FreeCellView : BaseGameView
 {
 	private readonly CardPile[] _tableau    = new CardPile[8];
 	private readonly CardPile[] _freeCells  = new CardPile[4];
@@ -25,32 +25,23 @@ public partial class FreeCellView : Node2D
 
 	private bool          _autoCompleteShown;
 	private FreeCellState _pendingSnapshot;
-	private bool          _gameWon;
-	private Button        _undoBtn;
-	private CanvasLayer   _winOverlay;
-
 	private readonly Stack<FreeCellState> _undoStack = new();
 	private Dictionary<(Suit, Rank), Card> _cardLookup = new();
 	private List<(Suit suit, Rank rank)> _dealOrder;
 
 	// ── Lifecycle ──────────────────────────────────────────────────────────
 
-	private float _topInset = 0f;
-
-	public override void _Ready()
+	protected override void SetupGame()
 	{
 #if DEBUG
 		EngineTests.RunTests();
 #endif
 		_cardScene  = GD.Load<PackedScene>("res://scenes/Shared/Card.tscn");
-		_topInset   = GetTopSafeInset();
-		LoadBackground();
-		SetupMenu();
 		SetupPiles();
 		CreateAllCards(); 
 
 		var saved = SaveManager.LoadGame<FreeCellState>("FreeCell");
-		if (saved != null)
+		if (saved != null && !saved.IsFinished)
 		{
 			GD.Print("Loaded saved FreeCell game.");
 			ApplyState(saved);
@@ -60,6 +51,8 @@ public partial class FreeCellView : Node2D
 			GD.Print("Starting new FreeCell game.");
 			DealCards();
 		}
+
+		_menu.SetUndoEnabled(_undoStack.Count > 0);
 	}
 
 	private void CreateAllCards()
@@ -78,65 +71,16 @@ public partial class FreeCellView : Node2D
 		}
 	}
 
-	// Convert screen-pixel top safe-area inset to game units
-	private float GetTopSafeInset()
+	protected override void NewGame() => DealCards();
+	protected override void RestartGame() => DealCards(_dealOrder);
+	protected override void UndoMove()
 	{
-		var screenH  = (float)DisplayServer.ScreenGetSize().Y;
-		var safeTopPx = (float)DisplayServer.GetDisplaySafeArea().Position.Y;
-		if (safeTopPx <= 0f || screenH <= 0f) return 0f;
-		return safeTopPx / screenH * GetViewport().GetVisibleRect().Size.Y;
-	}
-
-	// ── Background ─────────────────────────────────────────────────────────
-
-	private void LoadBackground()
-	{
-		BackgroundManager.LoadRandomBackground(GetNode<Sprite2D>("Background"));
-	}
-
-	// ── Menu ───────────────────────────────────────────────────────────────
-
-	private void SetupMenu()
-	{
-		var layer = new CanvasLayer();
-		AddChild(layer);
-
-		float barH = 95f + _topInset;
-		var bar = new ColorRect
+		if (_undoStack.Count > 0)
 		{
-			Color = new Color(0f, 0f, 0f, 0.50f),
-			Size  = new Vector2(720, barH),
-		};
-		layer.AddChild(bar);
-
-		float btnY = _topInset + 22f;
-		bar.AddChild(MakeMenuButton("New",     new Vector2(30,  btnY), NewGame));
-		bar.AddChild(MakeMenuButton("Restart", new Vector2(200, btnY), RestartGame));
-		_undoBtn = MakeMenuButton("Undo", new Vector2(370, btnY), UndoMove);
-		bar.AddChild(_undoBtn);
-		bar.AddChild(MakeMenuButton("Games", new Vector2(540, btnY), ShowGameSelection));
-	}
-
-	private void ShowGameSelection()
-	{
-		var launcher = GetParent<Launcher>();
-		if (launcher != null)
-		{
-			launcher.SwitchGame("Launcher");
+			ApplyState(_undoStack.Pop());
+			SaveManager.SaveGame("FreeCell", CaptureState());
+			_menu.SetUndoEnabled(_undoStack.Count > 0);
 		}
-	}
-
-	private static Button MakeMenuButton(string text, Vector2 pos, Action handler)
-	{
-		var btn = new Button
-		{
-			Text     = text,
-			Position = pos,
-			Size     = new Vector2(130, 52),
-		};
-		btn.AddThemeFontSizeOverride("font_size", 20);
-		btn.Pressed += handler;
-		return btn;
 	}
 
 	// ── Piles / labels ─────────────────────────────────────────────────────
@@ -193,7 +137,6 @@ public partial class FreeCellView : Node2D
 		switch (@event)
 		{
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } mb:
-				GD.Print($"FreeCell Click at {mb.Position}");
 				BeginDrag(mb.Position);
 				break;
 			case InputEventMouseMotion mm when _dragCards.Count > 0:
@@ -258,9 +201,7 @@ public partial class FreeCellView : Node2D
 		if (_dragCards.Count == 0) return;
 
 		var bottomCard = _dragCards[0];
-		int count      = _dragCards.Count;
 		
-		// --- NEW AREA-BASED HIT DETECTION ---
 		var allPiles = _freeCells.Concat(_foundations).Concat(_tableau).ToList();
 		var target = OverlapUtils.GetMostOverlapping(bottomCard.GetGlobalRect(), allPiles, p => p.GetGlobalRect());
 
@@ -308,6 +249,7 @@ public partial class FreeCellView : Node2D
 		{
 			var stateAfterMove = CaptureState();
 			SaveManager.SaveGame("FreeCell", stateAfterMove);
+			_menu.SetUndoEnabled(_undoStack.Count > 0);
 			if (FreeCellEngine.IsWon(stateAfterMove))
 				EnterWinState();
 			else if (!_autoCompleteShown && FreeCellEngine.CanAutoComplete(stateAfterMove))
@@ -328,8 +270,6 @@ public partial class FreeCellView : Node2D
 		_dragOffsets    = null;
 	}
 
-	// ── Hit testing ────────────────────────────────────────────────────────
-
 	private Card GetCardAt(Vector2 pos)
 	{
 		var allPiles = _foundations.Concat(_freeCells).Concat(_tableau);
@@ -340,29 +280,9 @@ public partial class FreeCellView : Node2D
 		return null;
 	}
 
-	private CardPile GetPileAt(Vector2 pos)
-	{
-		CardPile best  = null;
-		float bestDist = float.MaxValue;
-
-		var allPiles = _freeCells.Concat(_foundations).Concat(_tableau);
-		foreach (var pile in allPiles)
-		{
-			var check = pile.IsEmpty ? pile.GlobalPosition : pile.TopCard.GlobalPosition;
-			if (!IsPointInDropZone(pos, check)) continue;
-			float dist = pos.DistanceTo(check);
-			if (dist < bestDist) { bestDist = dist; best = pile; }
-		}
-		return best;
-	}
-
 	private static bool IsPointInCard(Vector2 point, Vector2 center) =>
 		Math.Abs(point.X - center.X) <= Card.CardWidth  / 2 &&
 		Math.Abs(point.Y - center.Y) <= Card.CardHeight / 2;
-
-	private static bool IsPointInDropZone(Vector2 point, Vector2 center) =>
-		Math.Abs(point.X - center.X) <= Card.CardWidth  * 0.8f &&
-		Math.Abs(point.Y - center.Y) <= Card.CardHeight * 0.9f;
 
 	private void DealCards(List<(Suit suit, Rank rank)> order = null)
 	{
@@ -371,7 +291,7 @@ public partial class FreeCellView : Node2D
 
 		foreach (var pile in _freeCells.Concat(_foundations).Concat(_tableau))
 			while (!pile.IsEmpty)
-				pile.RemoveTopCard(); // Don't queue free, we reuse them
+				pile.RemoveTopCard();
 
 		for (int i = 0; i < 4; i++)
 		{
@@ -397,11 +317,12 @@ public partial class FreeCellView : Node2D
 			_tableau[i % 8].AddCard(card);
 		}
 		SaveManager.SaveGame("FreeCell", CaptureState());
+		_menu.SetUndoEnabled(false);
 	}
 
 	private FreeCellState CaptureState()
 	{
-		var state = new FreeCellState();
+		var state = new FreeCellState { IsFinished = _gameWon };
 		for (int i = 0; i < 8; i++)
 			state.Tableau[i] = _tableau[i].Cards.Select(c => new CardModel(c.Suit, c.Rank)).ToList();
 		for (int i = 0; i < 4; i++)
@@ -449,101 +370,66 @@ public partial class FreeCellView : Node2D
 			_foundationLabels[i].Text = snap.FoundationSuits[i].HasValue
 				? SuitSymbol(snap.FoundationSuits[i].Value) : "?";
 		}
-	}
-
-	private void UndoMove()
-	{
-		if (_undoStack.Count == 0) return;
-		var state = _undoStack.Pop();
-		ApplyState(state);
-		SaveManager.SaveGame("FreeCell", state);
-	}
-
-	private void NewGame()    { LoadBackground(); DealCards(); }
-	private void RestartGame() => DealCards(_dealOrder?.ToList());
-
-	private void AutoFinish()
-	{
-		CancelDrag();
-		_undoStack.Clear();
-		var sourcePiles = _tableau.Concat(_freeCells).ToList();
-		bool progress = true;
-		while (progress)
-		{
-			progress = false;
-			foreach (var pile in sourcePiles)
-			{
-				if (pile.IsEmpty) continue;
-				var card = pile.TopCard;
-				var cardModel = new CardModel(card.Suit, card.Rank);
-				for (int i = 0; i < 4; i++)
-				{
-					var state = CaptureState();
-					if (!FreeCellEngine.CanMove(state, new[] { cardModel }, PileType.Foundation, i).IsValid) continue;
-					if (_foundations[i].IsEmpty)
-					{
-						_foundations[i].FoundationSuit = card.Suit;
-						_foundationLabels[i].Text = SuitSymbol(card.Suit);
-					}
-					pile.RemoveTopCard();
-					_foundations[i].AddCard(card);
-					progress = true;
-					break;
-				}
-				if (progress) break;
-			}
-		}
-		SaveManager.SaveGame("FreeCell", CaptureState());
-		EnterWinState();
+		_gameWon = snap.IsFinished;
 	}
 
 	private void ShowAutoCompleteDialog()
 	{
 		_autoCompleteShown = true;
-		var vpSize = GetViewport().GetVisibleRect().Size;
-		float cx = vpSize.X / 2f;
-		float cy = vpSize.Y / 2f;
+		var popup = new CanvasLayer { Layer = 10 };
+		AddChild(popup);
 
-		var layer = new CanvasLayer { Layer = 20 };
-		AddChild(layer);
-		layer.AddChild(new ColorRect { Color = new Color(0, 0, 0, 0.55f), Size = vpSize });
-		var box = new ColorRect { Color = new Color(0.12f, 0.15f, 0.18f, 0.97f), Position = new Vector2(cx - 210, cy - 100), Size = new Vector2(420, 200) };
-		layer.AddChild(box);
-		var lbl = new Label { Text = "Auto-finish game?", Position = new Vector2(cx - 145, cy - 72) };
-		lbl.AddThemeFontSizeOverride("font_size", 28);
-		layer.AddChild(lbl);
+		var center = new CenterContainer();
+		center.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		popup.AddChild(center);
 
-		layer.AddChild(MakeMenuButton("Yes", new Vector2(cx - 200, cy - 10), () => { layer.QueueFree(); AutoFinish(); }));
-		layer.AddChild(MakeMenuButton("No", new Vector2(cx + 10, cy - 10), () => { _autoCompleteShown = false; layer.QueueFree(); }));
+		var panel = new PanelContainer { CustomMinimumSize = new Vector2(300, 150) };
+		center.AddChild(panel);
+
+		var vBox = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+		panel.AddChild(vBox);
+
+		vBox.AddChild(new Label { Text = "Auto-complete available!", HorizontalAlignment = HorizontalAlignment.Center });
+		
+		var btn = new Button { Text = "Finish Game" };
+		btn.Pressed += () => {
+			popup.QueueFree();
+			RunAutoComplete();
+		};
+		vBox.AddChild(btn);
+
+		var cancel = new Button { Text = "Not now" };
+		cancel.Pressed += () => popup.QueueFree();
+		vBox.AddChild(cancel);
 	}
 
-	private void EnterWinState()
+	private async void RunAutoComplete()
 	{
-		_gameWon = true;
-		GetNode<Node2D>("FreeCells").Visible   = false;
-		GetNode<Node2D>("Foundations").Visible = false;
-		GetNode<Node2D>("Tableau").Visible     =     false;
-		if (_undoBtn != null) _undoBtn.Disabled = true;
-		_winOverlay = new CanvasLayer { Layer = 5 };
-		AddChild(_winOverlay);
-		var vpSize = GetViewport().GetVisibleRect().Size;
-		var band = new ColorRect { Color = new Color(0f, 0f, 0f, 0.45f), Position = new Vector2(0, vpSize.Y / 2f - 50), Size = new Vector2(vpSize.X, 100) };
-		_winOverlay.AddChild(band);
-		var lbl = new Label { Text = "You Won!", HorizontalAlignment = HorizontalAlignment.Center, Size = new Vector2(vpSize.X, 80), Position = new Vector2(0, vpSize.Y / 2f - 40) };
-		lbl.AddThemeFontSizeOverride("font_size", 52);
-		lbl.AddThemeColorOverride("font_color", Colors.White);
-		_winOverlay.AddChild(lbl);
-	}
+		while (FreeCellEngine.CanAutoComplete(CaptureState()))
+		{
+			var state = CaptureState();
+			var move = FreeCellEngine.GetAutoCompleteMove(state);
+			if (move == null) break;
 
-	private void ExitWinState()
-	{
-		if (!_gameWon) return;
-		_gameWon = false;
-		GetNode<Node2D>("FreeCells").Visible   = true;
-		GetNode<Node2D>("Foundations").Visible = true;
-		GetNode<Node2D>("Tableau").Visible     = true;
-		if (_undoBtn != null) _undoBtn.Disabled = false;
-		_winOverlay?.QueueFree();
-		_winOverlay = null;
+			Card card = null;
+			if (move.FromType == PileType.Tableau) card = _tableau[move.FromIdx].RemoveTopCard();
+			else card = _freeCells[move.FromIdx].RemoveTopCard();
+
+			_foundations[move.ToIdx].AddCard(card);
+			
+			if (_foundations[move.ToIdx].Count == 1)
+			{
+				_foundations[move.ToIdx].FoundationSuit = card.Suit;
+				_foundationLabels[move.ToIdx].Text = SuitSymbol(card.Suit);
+			}
+
+			await ToSignal(GetTree().CreateTimer(0.05f), SceneTreeTimer.SignalName.Timeout);
+			if (FreeCellEngine.IsWon(CaptureState()))
+			{
+				EnterWinState();
+				break;
+			}
+		}
+		SaveManager.SaveGame("FreeCell", CaptureState());
 	}
 }

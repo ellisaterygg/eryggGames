@@ -114,4 +114,31 @@ public static class FreeCellEngine
 
 		return tempState.Tableau.All(p => p.Count == 0) && tempState.FreeCells.All(p => p.Count == 0);
 	}
+
+	public record AutoCompleteMove(PileType FromType, int FromIdx, int ToIdx);
+
+	public static AutoCompleteMove GetAutoCompleteMove(FreeCellState state)
+	{
+		var sourcePiles = state.Tableau.Concat(state.FreeCells).Where(p => p.Count > 0);
+		foreach (var pile in sourcePiles)
+		{
+			var card = pile[^1];
+			for (int i = 0; i < 4; i++)
+			{
+				var result = CanMove(state, new[] { card }, PileType.Foundation, i);
+				if (result.IsValid)
+				{
+					int fromIdx = -1;
+					PileType fromType = PileType.Tableau;
+					for (int j = 0; j < 8; j++) if (state.Tableau[j] == pile) { fromIdx = j; fromType = PileType.Tableau; break; }
+					if (fromIdx == -1)
+					{
+						for (int j = 0; j < 4; j++) if (state.FreeCells[j] == pile) { fromIdx = j; fromType = PileType.FreeCell; break; }
+					}
+					return new AutoCompleteMove(fromType, fromIdx, i);
+				}
+			}
+		}
+		return null;
+	}
 }
