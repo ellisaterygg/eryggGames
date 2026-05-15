@@ -1,3 +1,4 @@
+#nullable enable
 using Godot;
 using System;
 using System.Collections.Generic;
@@ -16,18 +17,12 @@ public partial class FreeCellView : BaseGameView
 	private readonly CardPile[] _foundations = new CardPile[4];
 	private readonly Label[]    _foundationLabels = new Label[4];
 
-	private PackedScene _cardScene;
-
-	// Drag state
-	private readonly List<Card> _dragCards = new();
-	private CardPile  _dragOriginPile;
-	private Vector2[] _dragOffsets;
-
+	private PackedScene _cardScene = null!;
 	private bool          _autoCompleteShown;
-	private FreeCellState _pendingSnapshot;
+	private FreeCellState? _pendingSnapshot;
 	private readonly Stack<FreeCellState> _undoStack = new();
 	private Dictionary<(Suit, Rank), Card> _cardLookup = new();
-	private List<(Suit suit, Rank rank)> _dealOrder;
+	private List<(Suit suit, Rank rank)>? _dealOrder;
 
 	// ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -43,16 +38,12 @@ public partial class FreeCellView : BaseGameView
 		var saved = SaveManager.LoadGame<FreeCellState>("FreeCell");
 		if (saved != null && !saved.IsFinished)
 		{
-			GD.Print("Loaded saved FreeCell game.");
 			ApplyState(saved);
 		}
 		else
 		{
-			GD.Print("Starting new FreeCell game.");
 			DealCards();
 		}
-
-		_menu.SetUndoEnabled(_undoStack.Count > 0);
 	}
 
 	private void CreateAllCards()
@@ -83,6 +74,76 @@ public partial class FreeCellView : BaseGameView
 		}
 	}
 
+	// ── Rules ──────────────────────────────────────────────────────────────
+
+	protected override bool ShouldAllowDrag(Card card)
+	{
+		if (_autoCompleteShown) return false;
+		
+		var pile = card.CurrentPile;
+		if (pile == null) return false;
+		int idx = pile.Cards.IndexOf(card);
+
+		if (pile.PileType == PileType.Tableau && idx < pile.Count - 1)
+		{
+			var movingCards = pile.Cards.Skip(idx).Select(c => new CardModel(c.Suit, c.Rank)).ToList();
+			return FreeCellEngine.IsValidSequence(movingCards);
+		}
+		return card == pile.TopCard;
+	}
+
+	protected override bool CanMoveStack(CardPile pile, Card card, int count) => true;
+
+	protected override CardPile? FindDropTarget(Card draggingCard)
+	{
+		var allPiles = _freeCells.Concat(_foundations).Concat(_tableau).ToList();
+		return OverlapUtils.GetMostOverlapping(draggingCard.GetGlobalRect(), allPiles, p => p.GetGlobalRect());
+	}
+
+	protected override bool CanDropCards(Card bottomCard, List<Card> draggingCards, CardPile target)
+	{
+		var movingModels = draggingCards.Select(c => new CardModel(c.Suit, c.Rank)).ToList();
+		int targetIdx = -1;
+		if (target.PileType == PileType.Tableau) targetIdx = Array.IndexOf(_tableau, target);
+		else if (target.PileType == PileType.FreeCell) targetIdx = Array.IndexOf(_freeCells, target);
+		else if (target.PileType == PileType.Foundation) targetIdx = Array.IndexOf(_foundations, target);
+
+		return FreeCellEngine.CanMove(CaptureState(), movingModels, target.PileType, targetIdx).IsValid;
+	}
+
+	protected override void ExecuteDrop(CardPile target, List<Card> draggingCards)
+	{
+		if (_pendingSnapshot != null) _undoStack.Push(_pendingSnapshot);
+
+		var bottomCard = draggingCards[0];
+		if (target.PileType == PileType.Foundation && target.IsEmpty)
+		{
+			target.FoundationSuit = bottomCard.Suit;
+			for (int i = 0; i < 4; i++)
+				if (_foundations[i] == target)
+					_foundationLabels[i].Text = SuitSymbol(bottomCard.Suit);
+		}
+
+		foreach (var c in draggingCards) target.AddCard(c);
+	}
+
+	protected override void OnBeforeDragStarted() => _pendingSnapshot = CaptureState();
+
+	protected override void OnDragEnded(bool valid)
+	{
+		_pendingSnapshot = null;
+		if (valid)
+		{
+			var state = CaptureState();
+			SaveManager.SaveGame("FreeCell", state);
+			_menu.SetUndoEnabled(_undoStack.Count > 0);
+			if (FreeCellEngine.IsWon(state)) EnterWinState();
+			else if (!_autoCompleteShown && FreeCellEngine.CanAutoComplete(state)) ShowAutoCompleteDialog();
+		}
+	}
+
+	protected override IEnumerable<CardPile> GetPilesForInput() => _foundations.Concat(_freeCells).Concat(_tableau);
+
 	// ── Piles / labels ─────────────────────────────────────────────────────
 
 	private void SetupPiles()
@@ -111,6 +172,7 @@ public partial class FreeCellView : BaseGameView
 			_tableau[i] = GetNode<CardPile>($"Tableau/Column{i}");
 			_tableau[i].Position += safeOffset;
 			_tableau[i].PileType = PileType.Tableau;
+			_tableau[i].Cascade = CascadeDirection.Vertical;
 		}
 	}
 
@@ -130,164 +192,9 @@ public partial class FreeCellView : BaseGameView
 		_             => "?"
 	};
 
-	// ── Input ──────────────────────────────────────────────────────────────
-
-	public override void _Input(InputEvent @event)
-	{
-		switch (@event)
-		{
-			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } mb:
-				BeginDrag(mb.Position);
-				break;
-			case InputEventMouseMotion mm when _dragCards.Count > 0:
-				UpdateDrag(mm.Position);
-				break;
-			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
-				if (_dragCards.Count > 0)
-					EndDrag(_dragCards[0].GlobalPosition);
-				break;
-		}
-	}
-
-	private void BeginDrag(Vector2 mousePos)
-	{
-		if (_gameWon || _autoCompleteShown) return;
-		if (_dragCards.Count > 0) return;
-
-		var card = GetCardAt(mousePos);
-		if (card == null) return;
-
-		var pile = card.CurrentPile;
-		int idx  = pile.Cards.IndexOf(card);
-
-		if (pile.PileType == PileType.Tableau && idx < pile.Count - 1)
-		{
-			var movingCards = pile.Cards.Skip(idx).Select(c => new CardModel(c.Suit, c.Rank)).ToList();
-			if (!FreeCellEngine.IsValidSequence(movingCards)) return;
-		}
-		else if (card != pile.TopCard) return;
-
-		_pendingSnapshot = CaptureState();
-
-		int count = pile.Count - idx;
-		_dragOriginPile = pile;
-
-		var globalPos = new Vector2[count];
-		for (int i = 0; i < count; i++)
-			globalPos[i] = pile.Cards[idx + i].GlobalPosition;
-
-		var cards = pile.RemoveTopCards(count);
-		_dragOffsets = new Vector2[count];
-
-		for (int i = 0; i < count; i++)
-		{
-			AddChild(cards[i]);
-			cards[i].Position = globalPos[i];
-			_dragOffsets[i]   = globalPos[i] - mousePos;
-			cards[i].ZIndex   = 100 + i;
-			cards[i].Modulate = new Color(0.7f, 1f, 0.7f);
-			_dragCards.Add(cards[i]);
-		}
-	}
-
-	private void UpdateDrag(Vector2 mousePos)
-	{
-		for (int i = 0; i < _dragCards.Count; i++)
-			_dragCards[i].Position = mousePos + _dragOffsets[i];
-	}
-
-	private void EndDrag(Vector2 dropCenter)
-	{
-		if (_dragCards.Count == 0) return;
-
-		var bottomCard = _dragCards[0];
-		
-		var allPiles = _freeCells.Concat(_foundations).Concat(_tableau).ToList();
-		var target = OverlapUtils.GetMostOverlapping(bottomCard.GetGlobalRect(), allPiles, p => p.GetGlobalRect());
-
-		bool valid = false;
-		if (target != null && target != _dragOriginPile)
-		{
-			var movingModels = _dragCards.Select(c => new CardModel(c.Suit, c.Rank)).ToList();
-			int targetIdx = -1;
-			if (target.PileType == PileType.Tableau) targetIdx = Array.IndexOf(_tableau, target);
-			else if (target.PileType == PileType.FreeCell) targetIdx = Array.IndexOf(_freeCells, target);
-			else if (target.PileType == PileType.Foundation) targetIdx = Array.IndexOf(_foundations, target);
-
-			var state = CaptureState();
-			valid = FreeCellEngine.CanMove(state, movingModels, target.PileType, targetIdx).IsValid;
-		}
-
-		if (valid)
-		{
-			if (_pendingSnapshot != null)
-				_undoStack.Push(_pendingSnapshot);
-
-			if (target.PileType == PileType.Foundation && target.IsEmpty)
-			{
-				target.FoundationSuit = bottomCard.Suit;
-				for (int i = 0; i < 4; i++)
-					if (_foundations[i] == target)
-						_foundationLabels[i].Text = SuitSymbol(bottomCard.Suit);
-			}
-		}
-
-		var destination = valid ? target : _dragOriginPile;
-
-		foreach (var c in _dragCards)
-		{
-			c.Modulate = Colors.White;
-			destination.AddCard(c);
-		}
-
-		_dragCards.Clear();
-		_dragOriginPile  = null;
-		_dragOffsets     = null;
-		_pendingSnapshot = null;
-
-		if (valid)
-		{
-			var stateAfterMove = CaptureState();
-			SaveManager.SaveGame("FreeCell", stateAfterMove);
-			_menu.SetUndoEnabled(_undoStack.Count > 0);
-			if (FreeCellEngine.IsWon(stateAfterMove))
-				EnterWinState();
-			else if (!_autoCompleteShown && FreeCellEngine.CanAutoComplete(stateAfterMove))
-				ShowAutoCompleteDialog();
-		}
-	}
-
-	private void CancelDrag()
-	{
-		if (_dragCards.Count == 0) return;
-		foreach (var c in _dragCards)
-		{
-			c.Modulate = Colors.White;
-			_dragOriginPile.AddCard(c);
-		}
-		_dragCards.Clear();
-		_dragOriginPile = null;
-		_dragOffsets    = null;
-	}
-
-	private Card GetCardAt(Vector2 pos)
-	{
-		var allPiles = _foundations.Concat(_freeCells).Concat(_tableau);
-		foreach (var pile in allPiles)
-			for (int i = pile.Count - 1; i >= 0; i--)
-				if (IsPointInCard(pos, pile.Cards[i].GlobalPosition))
-					return pile.Cards[i];
-		return null;
-	}
-
-	private static bool IsPointInCard(Vector2 point, Vector2 center) =>
-		Math.Abs(point.X - center.X) <= Card.CardWidth  / 2 &&
-		Math.Abs(point.Y - center.Y) <= Card.CardHeight / 2;
-
-	private void DealCards(List<(Suit suit, Rank rank)> order = null)
+	private void DealCards(List<(Suit suit, Rank rank)>? order = null)
 	{
 		ExitWinState();
-		CancelDrag();
 
 		foreach (var pile in _freeCells.Concat(_foundations).Concat(_tableau))
 			while (!pile.IsEmpty)
@@ -336,8 +243,6 @@ public partial class FreeCellView : BaseGameView
 
 	private void ApplyState(FreeCellState snap)
 	{
-		CancelDrag();
-
 		foreach (var pile in _freeCells.Concat(_foundations).Concat(_tableau))
 			while (!pile.IsEmpty)
 				pile.RemoveTopCard();
@@ -367,8 +272,8 @@ public partial class FreeCellView : BaseGameView
 				_foundations[i].AddCard(card);
 			}
 
-			_foundationLabels[i].Text = snap.FoundationSuits[i].HasValue
-				? SuitSymbol(snap.FoundationSuits[i].Value) : "?";
+			_foundationLabels[i].Text = snap.FoundationSuits[i] is Suit s
+				? SuitSymbol(s) : "?";
 		}
 		_gameWon = snap.IsFinished;
 	}
@@ -411,9 +316,11 @@ public partial class FreeCellView : BaseGameView
 			var move = FreeCellEngine.GetAutoCompleteMove(state);
 			if (move == null) break;
 
-			Card card = null;
+			Card? card = null;
 			if (move.FromType == PileType.Tableau) card = _tableau[move.FromIdx].RemoveTopCard();
 			else card = _freeCells[move.FromIdx].RemoveTopCard();
+
+			if (card == null) break;
 
 			_foundations[move.ToIdx].AddCard(card);
 			

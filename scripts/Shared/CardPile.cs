@@ -4,15 +4,18 @@ using EryggGames.Core;
 
 namespace EryggGames.Shared;
 
+public enum CascadeDirection { None, Vertical, Horizontal }
+
 public partial class CardPile : Node2D
 {
     public PileType PileType { get; set; }
     public Suit? FoundationSuit { get; set; }
+    public CascadeDirection Cascade { get; set; } = CascadeDirection.None;
 
     public readonly List<Card> Cards = new();
     public float CardOffset { get; set; } = 55f;
 
-    public Card TopCard => Cards.Count > 0 ? Cards[^1] : null;
+    public Card? TopCard => Cards.Count > 0 ? Cards[^1] : null;
     public int Count => Cards.Count;
     public bool IsEmpty => Cards.Count == 0;
 
@@ -21,12 +24,16 @@ public partial class CardPile : Node2D
         float width = Card.CardWidth;
         float height = Card.CardHeight;
         
-        if (PileType == PileType.Tableau && Cards.Count > 1)
+        if (Cascade == CascadeDirection.Vertical && Cards.Count > 1)
         {
             height += (Cards.Count - 1) * CardOffset;
         }
+        else if (Cascade == CascadeDirection.Horizontal && Cards.Count > 1)
+        {
+            width += (Cards.Count - 1) * CardOffset;
+        }
 
-        return new Rect2(GlobalPosition - new Vector2(width / 2, Card.CardHeight / 2), width, height);
+        return new Rect2(GlobalPosition - new Vector2(Card.CardWidth / 2, Card.CardHeight / 2), width, height);
     }
 
     public void AddCard(Card card)
@@ -43,7 +50,7 @@ public partial class CardPile : Node2D
         if (wasEmpty) QueueRedraw();
     }
 
-    public Card RemoveTopCard()
+    public Card? RemoveTopCard()
     {
         if (IsEmpty) return null;
         var card = Cards[^1];
@@ -58,7 +65,10 @@ public partial class CardPile : Node2D
     {
         var removed = new List<Card>();
         for (int i = 0; i < count; i++)
-            removed.Insert(0, RemoveTopCard());
+        {
+            var c = RemoveTopCard();
+            if (c != null) removed.Insert(0, c);
+        }
         return removed;
     }
 
@@ -77,8 +87,10 @@ public partial class CardPile : Node2D
         DrawRect(new Rect2(-w / 2, -h / 2, w, h), border, filled: false, width: 2f);
     }
 
-    private Vector2 GetCardPosition(int index) =>
-        PileType == PileType.Tableau
-            ? new Vector2(0, index * CardOffset)
-            : Vector2.Zero;
+    private Vector2 GetCardPosition(int index)
+    {
+        if (Cascade == CascadeDirection.Vertical) return new Vector2(0, index * CardOffset);
+        if (Cascade == CascadeDirection.Horizontal) return new Vector2(index * CardOffset, 0);
+        return Vector2.Zero;
+    }
 }

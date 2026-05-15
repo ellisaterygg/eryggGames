@@ -11,7 +11,7 @@ public partial class Card : Node2D
     public Suit Suit { get; private set; }
     public Rank Rank { get; private set; }
     public bool IsRed => Suit == Suit.Hearts || Suit == Suit.Diamonds;
-    public CardPile CurrentPile { get; set; }
+    public CardPile? CurrentPile { get; set; }
     
     private bool _isFaceUp = true;
     public bool IsFaceUp 
@@ -20,7 +20,7 @@ public partial class Card : Node2D
         set { _isFaceUp = value; QueueRedraw(); } 
     }
 
-	private string _rankText;
+	private string? _rankText;
 	private Color  _suitColor;
 
 	public void Init(Suit suit, Rank rank)

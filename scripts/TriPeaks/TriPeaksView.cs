@@ -1,3 +1,4 @@
+#nullable enable
 using Godot;
 using System;
 using System.Collections.Generic;
@@ -5,31 +6,62 @@ using System.Linq;
 using EryggGames.Core;
 using EryggGames.Shared;
 using EryggGames.TriPeaks.Core;
+using EryggGames.TriPeaks.Tests;
 
 namespace EryggGames.TriPeaks;
 
 public partial class TriPeaksView : BaseGameView
 {
-	private CardPile _stockPile;
-	private CardPile _wastePile;
+	private CardPile _stockPile = null!;
+	private CardPile _wastePile = null!;
 	private Dictionary<(int r, int c), Card> _peaksCards = new();
 	private TriPeaksState _state = new();
-	private PackedScene _cardScene;
+	private PackedScene _cardScene = null!;
+
+	private List<GameOption> _options = new();
 
 	protected override void SetupGame()
 	{
+#if DEBUG
+		SolverTests.RunTests();
+#endif
 		_cardScene = GD.Load<PackedScene>("res://scenes/Shared/Card.tscn");
 		SetupPiles();
 
 		var saved = SaveManager.LoadGame<TriPeaksState>("TriPeaks");
 		if (saved != null && !saved.IsFinished)
 		{
-			ApplyState(saved);
+			_state = saved;
+			ApplyState(_state);
 		}
 		else
 		{
 			NewGame();
 		}
+		SetupOptionsMenu();
+	}
+
+	private void SetupOptionsMenu()
+	{
+		_options = new List<GameOption>
+		{
+			new GameOption { 
+				Id = "winnable_only", 
+				Label = "Deals", 
+				Options = new[] { "All Deals", "Winnable Only" }, 
+				SelectedIndex = _state.WinnableOnly ? 1 : 0 
+			}
+		};
+		_menu.SetOptions(_options);
+	}
+
+	protected override void OnOptionsApplied(bool startNewGame)
+	{
+		var winOpt = _options.First(o => o.Id == "winnable_only");
+		_state.WinnableOnly = winOpt.SelectedIndex == 1;
+
+		if (startNewGame) NewGame();
+		else SaveManager.SaveGame("TriPeaks", _state);
 	}
 
 	protected override bool ShowUndoButton => false;
@@ -54,8 +86,32 @@ public partial class TriPeaksView : BaseGameView
 	{
 		ExitWinState();
 		LoadBackground();
-		var deck = new Deck().Shuffle();
-		_state = new TriPeaksState { InitialDeal = deck.Select(c => new CardModel(c.suit, c.rank)).ToList() };
+
+		List<CardModel> order;
+		int attempts = 0;
+		do {
+			var deck = new Deck().Shuffle();
+			order = deck.Select(c => new CardModel(c.suit, c.rank)).ToList();
+			attempts++;
+
+			if (!_state.WinnableOnly) break;
+
+			var tempState = new TriPeaksState();
+			int idx = 0;
+			for (int r = 0; r < 4; r++)
+				for (int c = 0; c < tempState.Peaks[r].Length; c++)
+					tempState.Peaks[r][c] = order[idx++];
+			
+			tempState.Waste.Add(order[idx++]);
+			while (idx < order.Count) tempState.Stock.Add(order[idx++]);
+
+			if (TriPeaksSolver.IsWinnable(tempState)) break;
+
+		} while (attempts < 200);
+
+		GD.Print($"Dealt winnable TriPeaks in {attempts} attempts.");
+		
+		_state.InitialDeal = order;
 		DealFromOrder(_state.InitialDeal);
 	}
 
@@ -138,7 +194,7 @@ public partial class TriPeaksView : BaseGameView
 
 	private void ClearBoard()
 	{
-		foreach (var c in _peaksCards.Values) c.QueueFree();
+		foreach (var c in _peaksCards.Values) if (c != null) c.QueueFree();
 		_peaksCards.Clear();
 		while (!_stockPile.IsEmpty) _stockPile.RemoveTopCard()?.QueueFree();
 		while (!_wastePile.IsEmpty) _wastePile.RemoveTopCard()?.QueueFree();
@@ -161,38 +217,91 @@ public partial class TriPeaksView : BaseGameView
 		return new Vector2(x, y);
 	}
 
-	public override void _Input(InputEvent @event)
+	// ── Rules ──────────────────────────────────────────────────────────────
+
+	protected override bool ShouldAllowDrag(Card card)
 	{
-		if (_gameWon) return;
-		if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } mb)
-		{
-			HandleClick(mb.GlobalPosition);
-		}
+		if (card.CurrentPile == _stockPile) return false;
+		if (!IsCardExposed(card)) return false;
+		var wasteTop = _wastePile.TopCard;
+		if (wasteTop == null) return true;
+		return TriPeaksEngine.IsValidMove(GetModel(card), GetModel(wasteTop));
 	}
 
-	private void HandleClick(Vector2 pos)
+	protected override CardPile? FindDropTarget(Card draggingCard)
 	{
-		var card = GetCardAt(pos);
-		if (card == null)
-		{
-			if (IsPointInCard(pos, GetNode<Node2D>("Stock").GlobalPosition))
-				DrawFromStock();
-			return;
-		}
+		if (draggingCard.GetGlobalRect().Intersects(_wastePile.GetGlobalRect())) return _wastePile;
+		return null;
+	}
 
+	protected override bool CanDropCards(Card bottomCard, List<Card> draggingCards, CardPile target)
+	{
+		if (target != _wastePile) return false;
+		var wasteTop = _wastePile.TopCard;
+		if (wasteTop == null) return true;
+		return TriPeaksEngine.IsValidMove(GetModel(bottomCard), GetModel(wasteTop));
+	}
+
+	protected override void ExecuteDrop(CardPile target, List<Card> draggingCards)
+	{
+		MoveToWaste(draggingCards[0]);
+	}
+
+	protected override void HandleCardClick(Card card)
+	{
 		if (card.CurrentPile == _stockPile)
 		{
 			DrawFromStock();
-			return;
 		}
-
-		if (!IsCardExposed(card)) return;
-
-		if (TriPeaksEngine.IsValidMove(GetModel(card), GetModel(_wastePile.TopCard)))
+		else if (IsCardExposed(card))
 		{
-			MoveToWaste(card);
-			UpdateGameState();
+			var wasteTop = _wastePile.TopCard;
+			if (wasteTop == null || TriPeaksEngine.IsValidMove(GetModel(card), GetModel(wasteTop)))
+			{
+				MoveToWaste(card);
+			}
 		}
+	}
+
+	protected override void HandleEmptySpaceClick(Vector2 globalPos)
+	{
+		if (IsPointInPile(globalPos, _stockPile))
+		{
+			DrawFromStock();
+		}
+	}
+
+	protected override void CancelDrag()
+	{
+		if (_dragCards.Count == 0) return;
+		var dragCard = _dragCards[0];
+		if (_dragOriginPile != null)
+		{
+			_dragOriginPile.AddCard(dragCard);
+		}
+		else
+		{
+			// Was in the peaks (dictionary managed)
+			GetNode("PeaksContainer").AddChild(dragCard);
+			var pPos = GetPyramidPos(dragCard);
+			if (pPos.HasValue) dragCard.Position = GetPeakPosition(pPos.Value.r, pPos.Value.c);
+		}
+	}
+
+	protected override IEnumerable<CardPile> GetPilesForInput()
+	{
+		return new[] { _stockPile, _wastePile };
+	}
+
+	protected override Card? GetCardAt(Vector2 globalPos)
+	{
+		foreach (var card in _peaksCards.Values.Reverse())
+		{
+			if (card != null && IsPointInCard(globalPos, card.GlobalPosition)) return card;
+		}
+		if (!_wastePile.IsEmpty && IsPointInCard(globalPos, _wastePile.TopCard!.GlobalPosition)) return _wastePile.TopCard;
+		if (!_stockPile.IsEmpty && IsPointInCard(globalPos, _stockPile.TopCard!.GlobalPosition)) return _stockPile.TopCard;
+		return null;
 	}
 
 	private void DrawFromStock()
@@ -218,9 +327,9 @@ public partial class TriPeaksView : BaseGameView
 			_peaksCards.Remove(pPos.Value);
 			var model = GetModel(card);
 			_state.Waste.Add(model);
-			card.Reparent(_wastePile);
 			_wastePile.AddCard(card);
 			card.IsFaceUp = true;
+			UpdateGameState();
 		}
 	}
 
@@ -241,17 +350,6 @@ public partial class TriPeaksView : BaseGameView
 
 	private CardModel GetModel(Card card) => new CardModel(card.Suit, card.Rank);
 
-	private Card? GetCardAt(Vector2 pos)
-	{
-		foreach (var card in _peaksCards.Values.Reverse())
-		{
-			if (IsPointInCard(pos, card.GlobalPosition)) return card;
-		}
-		if (!_wastePile.IsEmpty && IsPointInCard(pos, _wastePile.TopCard.GlobalPosition)) return _wastePile.TopCard;
-		if (!_stockPile.IsEmpty && IsPointInCard(pos, _stockPile.TopCard.GlobalPosition)) return _stockPile.TopCard;
-		return null;
-	}
-
 	private void UpdateGameState()
 	{
 		UpdateCardVisuals();
@@ -265,13 +363,10 @@ public partial class TriPeaksView : BaseGameView
 		{
 			var (r, c) = kvp.Key;
 			var card = kvp.Value;
+			if (card == null) continue;
 			bool exposed = TriPeaksEngine.IsExposed(r, c, _state);
 			if (exposed && !card.IsFaceUp) card.IsFaceUp = true;
 			card.Modulate = exposed ? Colors.White : new Color(0.7f, 0.7f, 0.7f);
 		}
 	}
-
-	private static bool IsPointInCard(Vector2 point, Vector2 center) =>
-		Math.Abs(point.X - center.X) <= Card.CardWidth / 2 &&
-		Math.Abs(point.Y - center.Y) <= Card.CardHeight / 2;
 }

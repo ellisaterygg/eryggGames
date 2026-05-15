@@ -9,14 +9,15 @@ public static class OverlapUtils
     /// <summary>
     /// Finds the item in the collection that has the most overlapping area with the source rect.
     /// </summary>
-    public static T GetMostOverlapping<T>(Rect2 sourceRect, IEnumerable<T> candidates, System.Func<T, Rect2> getRectFunc, float minOverlapRatio = 0.2f) where T : class
+    public static T? GetMostOverlapping<T>(Rect2 sourceRect, IEnumerable<T?> candidates, System.Func<T, Rect2> getRectFunc, float minOverlapRatio = 0.2f) where T : class
     {
-        T bestCandidate = null;
+        T? bestCandidate = null;
         float maxArea = 0f;
         float sourceArea = sourceRect.Area;
 
         foreach (var candidate in candidates)
         {
+            if (candidate == null) continue;
             Rect2 targetRect = getRectFunc(candidate);
             if (!sourceRect.Intersects(targetRect)) continue;
 

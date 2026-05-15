@@ -117,7 +117,7 @@ public static class FreeCellEngine
 
 	public record AutoCompleteMove(PileType FromType, int FromIdx, int ToIdx);
 
-	public static AutoCompleteMove GetAutoCompleteMove(FreeCellState state)
+	public static AutoCompleteMove? GetAutoCompleteMove(FreeCellState state)
 	{
 		var sourcePiles = state.Tableau.Concat(state.FreeCells).Where(p => p.Count > 0);
 		foreach (var pile in sourcePiles)

@@ -5,12 +5,12 @@ namespace EryggGames;
 
 public partial class Launcher : Control
 {
-    private Node _currentGame;
-    private Control _menuLayer;
-    private PackedScene _freeCellScene;
-    private PackedScene _pyramidScene;
-    private PackedScene _triPeaksScene;
-    private PackedScene _klondikeScene;
+    private Node? _currentGame;
+    private Control _menuLayer = null!;
+    private PackedScene _freeCellScene = null!;
+    private PackedScene _pyramidScene = null!;
+    private PackedScene _triPeaksScene = null!;
+    private PackedScene _klondikeScene = null!;
 
     public override void _Ready()
     {
@@ -80,13 +80,13 @@ public partial class Launcher : Control
             return;
         }
 
-        PackedScene scene = gameName switch
+        PackedScene? scene = gameName switch
         {
             "Klondike" => _klondikeScene,
             "FreeCell" => _freeCellScene,
-            "Pyramid" => _pyramidScene,
+            "Pyramid"  => _pyramidScene,
             "TriPeaks" => _triPeaksScene,
-            _ => null
+            _          => null
         };
 
         if (scene != null)

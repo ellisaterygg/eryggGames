@@ -137,8 +137,6 @@ public partial class GameMenu : CanvasLayer
         foreach (Node child in _optionsContainer.GetChildren()) child.QueueFree();
         _optionRadioGroups.Clear();
 
-        var buttonGroup = new ButtonGroup();
-
         foreach (var opt in options)
         {
             var optVBox = new VBoxContainer();
@@ -153,7 +151,7 @@ public partial class GameMenu : CanvasLayer
             optVBox.AddChild(radioHBox);
 
             var checkboxes = new List<CheckBox>();
-            var group = new ButtonGroup(); // Each option row gets its own group
+            var group = new ButtonGroup();
 
             for (int i = 0; i < opt.Options.Length; i++)
             {

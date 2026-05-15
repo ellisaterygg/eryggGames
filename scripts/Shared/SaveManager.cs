@@ -2,7 +2,6 @@ using Godot;
 using System;
 using System.IO;
 using System.Text.Json;
-using EryggGames.FreeCell.Core;
 
 namespace EryggGames.Shared;
 
@@ -24,7 +23,7 @@ public static class SaveManager
         }
     }
 
-    public static T LoadGame<T>(string gameName) where T : class
+    public static T? LoadGame<T>(string gameName) where T : class
     {
         string path = ProjectSettings.GlobalizePath($"{SavePathPrefix}{gameName}.json");
         if (!File.Exists(path)) return null;

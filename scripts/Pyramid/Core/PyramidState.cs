@@ -13,6 +13,7 @@ public class PyramidState
     public List<CardModel> Waste { get; set; } = new List<CardModel>();
     public int DeckPasses { get; set; } = 0;
     public bool IsFinished { get; set; }
+    public bool WinnableOnly { get; set; } = true;
 
     public PyramidState()
     {
@@ -32,6 +33,7 @@ public class PyramidState
         clone.Waste = Waste.ToList();
         clone.DeckPasses = DeckPasses;
         clone.IsFinished = IsFinished;
+        clone.WinnableOnly = WinnableOnly;
         return clone;
     }
 }
