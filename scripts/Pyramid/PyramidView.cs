@@ -14,9 +14,13 @@ public partial class PyramidView : BaseGameView
 {
 	private CardPile _stockPile = null!;
 	private CardPile _wastePile = null!;
+	private Label _redealLabel = null!;
 	private Dictionary<(int r, int c), Card> _pyramidCards = new();
 	private PyramidState _state = new();
+	private readonly Stack<PyramidState> _undoStack = new();
+	private PyramidState? _pendingSnapshot;
 	private PackedScene _cardScene = null!;
+	private const int MaxRedeals = 3;
 
 	private List<GameOption> _options = new();
 
@@ -61,26 +65,40 @@ public partial class PyramidView : BaseGameView
 		_state.WinnableOnly = winOpt.SelectedIndex == 1;
 
 		if (startNewGame) NewGame();
-		else SaveManager.SaveGame("Pyramid", _state);
+		else SaveGame();
 	}
 
-	protected override bool ShowUndoButton => false;
+	protected override void UndoMove()
+	{
+		if (_undoStack.Count > 0)
+		{
+			_state = _undoStack.Pop();
+			ApplyState(_state);
+			SaveGame();
+		}
+	}
 
 	private void SetupPiles()
 	{
 		var safeOffset = new Vector2(0, _topInset);
 		var stockNode = GetNode<Node2D>("Stock");
-		stockNode.Position += safeOffset;
 		_stockPile = new CardPile { Name = "StockPile", PileType = PileType.FreeCell };
 		stockNode.AddChild(_stockPile);
 
 		var wasteNode = GetNode<Node2D>("Waste");
-		wasteNode.Position += safeOffset;
 		_wastePile = new CardPile { Name = "WastePile", PileType = PileType.FreeCell };
 		wasteNode.AddChild(_wastePile);
 		
 		stockNode.Position = new Vector2(200, 1100) + safeOffset;
 		wasteNode.Position = new Vector2(400, 1100) + safeOffset;
+
+		_redealLabel = new Label { 
+			Position = new Vector2(120, 1170) + safeOffset,
+			HorizontalAlignment = HorizontalAlignment.Center,
+			Size = new Vector2(160, 40)
+		};
+		_redealLabel.AddThemeFontSizeOverride("font_size", 22);
+		AddChild(_redealLabel);
 
 		GetNode<Node2D>("PyramidContainer").Position += safeOffset;
 	}
@@ -89,6 +107,8 @@ public partial class PyramidView : BaseGameView
 	{
 		ExitWinState();
 		LoadBackground();
+		_undoStack.Clear();
+		_selectedCard = null;
 
 		List<CardModel> order;
 		int attempts = 0;
@@ -109,17 +129,22 @@ public partial class PyramidView : BaseGameView
 
 		} while (attempts < 200);
 
-		GD.Print($"Dealt winnable game in {attempts} attempts.");
-		
-		_state.InitialDeal = order;
+		_state = new PyramidState { 
+			InitialDeal = order,
+			WinnableOnly = _state.WinnableOnly 
+		};
 		DealFromOrder(_state.InitialDeal);
+		SaveGame();
 	}
 
 	protected override void RestartGame()
 	{
 		ExitWinState();
+		_undoStack.Clear();
+		_selectedCard = null;
 		if (_state.InitialDeal.Count == 0) NewGame();
 		else DealFromOrder(_state.InitialDeal);
+		SaveGame();
 	}
 
 	private void DealFromOrder(List<CardModel> order)
@@ -127,6 +152,7 @@ public partial class PyramidView : BaseGameView
 		_state.Stock.Clear();
 		_state.Waste.Clear();
 		_state.DeckPasses = 0;
+		_state.IsFinished = false;
 		for (int r = 0; r < 7; r++)
 			for (int c = 0; c <= r; c++) _state.Pyramid[r][c] = null;
 
@@ -136,7 +162,6 @@ public partial class PyramidView : BaseGameView
 		while (idx < order.Count) _state.Stock.Add(order[idx++]);
 
 		ApplyState(_state);
-		SaveGame();
 	}
 
 	private void ApplyState(PyramidState state)
@@ -175,6 +200,7 @@ public partial class PyramidView : BaseGameView
 		
 		UpdateCardVisuals();
 		_gameWon = _state.IsFinished;
+		_menu.SetUndoEnabled(_undoStack.Count > 0);
 	}
 
 	private Card CreateCard(CardModel model)
@@ -222,9 +248,36 @@ public partial class PyramidView : BaseGameView
 
 	protected override void HandleCardClick(Card card)
 	{
-		if (card.CurrentPile == _stockPile) DrawFromStock();
+		if (card.CurrentPile == _stockPile)
+		{
+			// Prioritize playing the card if it's a King or matches the current selection
+			if (card.Rank == Rank.King)
+			{
+				_undoStack.Push(_state.Clone());
+				RemoveCard(card);
+				UpdateGameState();
+				return;
+			}
+
+			if (_selectedCard != null && _selectedCard != card)
+			{
+				if ((int)_selectedCard.Rank + (int)card.Rank == 13)
+				{
+					_undoStack.Push(_state.Clone());
+					RemoveCard(_selectedCard);
+					RemoveCard(card);
+					_selectedCard = null;
+					UpdateGameState();
+					return;
+				}
+			}
+
+			// If no direct play was possible, draw to waste
+			DrawFromStock();
+		}
 		else if (card.Rank == Rank.King && IsCardExposed(card))
 		{
+			_undoStack.Push(_state.Clone());
 			RemoveCard(card);
 			UpdateGameState();
 		}
@@ -245,6 +298,7 @@ public partial class PyramidView : BaseGameView
 			{
 				if ((int)_selectedCard.Rank + (int)card.Rank == 13)
 				{
+					_undoStack.Push(_state.Clone());
 					RemoveCard(_selectedCard);
 					RemoveCard(card);
 					_selectedCard = null;
@@ -262,10 +316,15 @@ public partial class PyramidView : BaseGameView
 
 	private Card? _selectedCard;
 
+	protected override void OnBeforeDragStarted() => _pendingSnapshot = _state.Clone();
+
+	protected override void OnDragEnded(bool valid) => _pendingSnapshot = null;
+
 	protected override void BeginDrag(Card card, Vector2 globalMousePos)
 	{
 		if (card.Rank == Rank.King && IsCardExposed(card))
 		{
+			_undoStack.Push(_state.Clone());
 			RemoveCard(card);
 			UpdateGameState();
 			return;
@@ -275,6 +334,7 @@ public partial class PyramidView : BaseGameView
 
 	protected override void EndDrag(Vector2 globalMousePos)
 	{
+		if (_dragCards.Count == 0) return;
 		var dragCard = _dragCards[0];
 		
 		var candidates = _pyramidCards.Values
@@ -289,13 +349,18 @@ public partial class PyramidView : BaseGameView
 		{
 			if ((int)dragCard.Rank + (int)targetCard.Rank == 13)
 			{
-				RemoveCard(dragCard);
+				if (_pendingSnapshot != null) _undoStack.Push(_pendingSnapshot);
+				// Remove target first to avoid any potential side effects from removing the dragging card
 				RemoveCard(targetCard);
+				RemoveCard(dragCard);
 				valid = true;
 			}
 		}
 
-		if (!valid) CancelDrag();
+		if (!valid)
+		{
+			CancelDrag();
+		}
 
 		_dragCards.Clear();
 		_dragOriginPile = null;
@@ -342,17 +407,38 @@ public partial class PyramidView : BaseGameView
 			_pyramidCards.Remove(pos.Value);
 			card.QueueFree();
 		}
-		else if (card.CurrentPile == _wastePile || _dragOriginPile == _wastePile)
+		else
 		{
-			_state.Waste.Remove(GetModel(card));
-			if (card.CurrentPile == _wastePile) _wastePile.RemoveTopCard();
-			card.QueueFree();
-		}
-		else if (card.CurrentPile == _stockPile || _dragOriginPile == _stockPile)
-		{
-			_state.Stock.Remove(GetModel(card));
-			if (card.CurrentPile == _stockPile) _stockPile.RemoveTopCard();
-			card.QueueFree();
+			// Check if it's in a pile
+			var pile = card.CurrentPile;
+			if (pile == _wastePile)
+			{
+				if (_state.Waste.Count > 0) _state.Waste.RemoveAt(_state.Waste.Count - 1);
+				pile.Cards.Remove(card);
+				card.QueueFree();
+			}
+			else if (pile == _stockPile)
+			{
+				if (_state.Stock.Count > 0) _state.Stock.RemoveAt(_state.Stock.Count - 1);
+				pile.Cards.Remove(card);
+				card.QueueFree();
+			}
+			else if (_dragCards.Contains(card))
+			{
+				if (_dragOriginPile == _wastePile)
+				{
+					if (_state.Waste.Count > 0) _state.Waste.RemoveAt(_state.Waste.Count - 1);
+				}
+				else if (_dragOriginPile == _stockPile)
+				{
+					if (_state.Stock.Count > 0) _state.Stock.RemoveAt(_state.Stock.Count - 1);
+				}
+				card.QueueFree();
+			}
+			else
+			{
+				card.QueueFree();
+			}
 		}
 	}
 
@@ -360,26 +446,54 @@ public partial class PyramidView : BaseGameView
 	{
 		if (_state.Stock.Count > 0)
 		{
+			_undoStack.Push(_state.Clone());
 			var model = _state.Stock[^1];
 			_state.Stock.RemoveAt(_state.Stock.Count - 1);
 			_state.Waste.Add(model);
-			var card = _stockPile.RemoveTopCard()!;
+			
+			var card = _stockPile.RemoveTopCard();
+			if (card == null)
+			{
+				UpdateGameState();
+				return;
+			}
+
 			card.IsFaceUp = true;
 			_wastePile.AddCard(card);
 			UpdateGameState();
 		}
-		else if (_state.DeckPasses < 2)
+		else if (_state.DeckPasses < MaxRedeals)
 		{
+			_undoStack.Push(_state.Clone());
 			_state.DeckPasses++;
+			
 			while (_state.Waste.Count > 0)
 			{
 				var m = _state.Waste[^1];
 				_state.Waste.RemoveAt(_state.Waste.Count - 1);
 				_state.Stock.Add(m);
-				var c = _wastePile.RemoveTopCard()!;
-				c.IsFaceUp = false;
-				_stockPile.AddCard(c);
+				var c = _wastePile.RemoveTopCard();
+				if (c != null)
+				{
+					c.IsFaceUp = false;
+					_stockPile.AddCard(c);
+				}
 			}
+
+			// Auto-draw the first card after recycling to show immediate progress
+			if (_state.Stock.Count > 0)
+			{
+				var m = _state.Stock[^1];
+				_state.Stock.RemoveAt(_state.Stock.Count - 1);
+				_state.Waste.Add(m);
+				var c = _stockPile.RemoveTopCard();
+				if (c != null)
+				{
+					c.IsFaceUp = true;
+					_wastePile.AddCard(c);
+				}
+			}
+
 			UpdateGameState();
 		}
 	}
@@ -404,11 +518,25 @@ public partial class PyramidView : BaseGameView
 	private void UpdateGameState()
 	{
 		UpdateCardVisuals();
-		SaveGame();
-		if (PyramidEngine.IsWon(_state)) EnterWinState();
+		_redealLabel.Text = $"Redeals: {MaxRedeals - _state.DeckPasses}";
+		
+		if (PyramidEngine.IsWon(_state))
+		{
+			_state.IsFinished = true;
+			SaveGame();
+			EnterWinState();
+		}
+		else
+		{
+			SaveGame();
+		}
 	}
 
-	private void SaveGame() => SaveManager.SaveGame("Pyramid", _state);
+	private void SaveGame()
+	{
+		SaveManager.SaveGame("Pyramid", _state);
+		_menu.SetUndoEnabled(_undoStack.Count > 0);
+	}
 
 	private void UpdateCardVisuals()
 	{
@@ -418,7 +546,18 @@ public partial class PyramidView : BaseGameView
 			if (card == null) continue;
 			bool exposed = PyramidEngine.IsExposed(kvp.Key.r, kvp.Key.c, _state);
 			card.Modulate = exposed ? Colors.White : new Color(0.7f, 0.7f, 0.7f);
+			if (card == _selectedCard) card.Modulate = new Color(0.7f, 1f, 0.7f);
 		}
-		if (!_stockPile.IsEmpty) _stockPile.TopCard!.IsFaceUp = true;
+		
+		if (!_stockPile.IsEmpty) 
+		{
+			_stockPile.TopCard!.IsFaceUp = true;
+			_stockPile.TopCard.Modulate = (_selectedCard == _stockPile.TopCard) ? new Color(0.7f, 1f, 0.7f) : Colors.White;
+		}
+		
+		if (!_wastePile.IsEmpty)
+		{
+			_wastePile.TopCard!.Modulate = (_selectedCard == _wastePile.TopCard) ? new Color(0.7f, 1f, 0.7f) : Colors.White;
+		}
 	}
 }

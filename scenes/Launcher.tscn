@@ -1,8 +1,8 @@
 [gd_scene format=3 uid="uid://b8y1j2k3l4m5n"]
 
-[ext_resource type="Script" path="res://scripts/Launcher.cs" id="1_launcher"]
+[ext_resource type="Script" uid="uid://3pd7nunnknc2" path="res://scripts/Launcher.cs" id="1_launcher"]
 
-[node name="Launcher" type="Control"]
+[node name="Launcher" type="Control" unique_id=1799644944]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

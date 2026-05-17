@@ -199,6 +199,7 @@ public partial class KlondikeView : BaseGameView
 
     private void ApplyState(KlondikeState snap)
     {
+        foreach (var card in _cardLookup.Values) card.Visible = false;
         foreach (var p in GetPilesForInput()) while (!p.IsEmpty) p.RemoveTopCard();
 
         for (int i = 0; i < 7; i++)

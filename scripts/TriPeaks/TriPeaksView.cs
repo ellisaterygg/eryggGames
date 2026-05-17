@@ -16,6 +16,8 @@ public partial class TriPeaksView : BaseGameView
 	private CardPile _wastePile = null!;
 	private Dictionary<(int r, int c), Card> _peaksCards = new();
 	private TriPeaksState _state = new();
+	private readonly Stack<TriPeaksState> _undoStack = new();
+	private TriPeaksState? _pendingSnapshot;
 	private PackedScene _cardScene = null!;
 
 	private List<GameOption> _options = new();
@@ -61,10 +63,18 @@ public partial class TriPeaksView : BaseGameView
 		_state.WinnableOnly = winOpt.SelectedIndex == 1;
 
 		if (startNewGame) NewGame();
-		else SaveManager.SaveGame("TriPeaks", _state);
+		else SaveGame();
 	}
 
-	protected override bool ShowUndoButton => false;
+	protected override void UndoMove()
+	{
+		if (_undoStack.Count > 0)
+		{
+			_state = _undoStack.Pop();
+			ApplyState(_state);
+			SaveGame();
+		}
+	}
 
 	private void SetupPiles()
 	{
@@ -86,6 +96,7 @@ public partial class TriPeaksView : BaseGameView
 	{
 		ExitWinState();
 		LoadBackground();
+		_undoStack.Clear();
 
 		List<CardModel> order;
 		int attempts = 0;
@@ -118,6 +129,7 @@ public partial class TriPeaksView : BaseGameView
 	protected override void RestartGame()
 	{
 		ExitWinState();
+		_undoStack.Clear();
 		if (_state.InitialDeal.Count == 0) NewGame();
 		else DealFromOrder(_state.InitialDeal);
 	}
@@ -183,6 +195,7 @@ public partial class TriPeaksView : BaseGameView
 		
 		UpdateCardVisuals();
 		_gameWon = _state.IsFinished;
+		_menu.SetUndoEnabled(_undoStack.Count > 0);
 	}
 
 	private Card CreateCard(CardModel model)
@@ -221,11 +234,7 @@ public partial class TriPeaksView : BaseGameView
 
 	protected override bool ShouldAllowDrag(Card card)
 	{
-		if (card.CurrentPile == _stockPile) return false;
-		if (!IsCardExposed(card)) return false;
-		var wasteTop = _wastePile.TopCard;
-		if (wasteTop == null) return true;
-		return TriPeaksEngine.IsValidMove(GetModel(card), GetModel(wasteTop));
+		return false;
 	}
 
 	protected override CardPile? FindDropTarget(Card draggingCard)
@@ -244,6 +253,7 @@ public partial class TriPeaksView : BaseGameView
 
 	protected override void ExecuteDrop(CardPile target, List<Card> draggingCards)
 	{
+		if (_pendingSnapshot != null) _undoStack.Push(_pendingSnapshot);
 		MoveToWaste(draggingCards[0]);
 	}
 
@@ -258,10 +268,15 @@ public partial class TriPeaksView : BaseGameView
 			var wasteTop = _wastePile.TopCard;
 			if (wasteTop == null || TriPeaksEngine.IsValidMove(GetModel(card), GetModel(wasteTop)))
 			{
+				_undoStack.Push(_state.Clone());
 				MoveToWaste(card);
 			}
 		}
 	}
+
+	protected override void OnBeforeDragStarted() => _pendingSnapshot = _state.Clone();
+
+	protected override void OnDragEnded(bool valid) => _pendingSnapshot = null;
 
 	protected override void HandleEmptySpaceClick(Vector2 globalPos)
 	{
@@ -283,7 +298,7 @@ public partial class TriPeaksView : BaseGameView
 		{
 			// Was in the peaks (dictionary managed)
 			GetNode("PeaksContainer").AddChild(dragCard);
-			var pPos = GetPyramidPos(dragCard);
+			var pPos = GetPeakPos(dragCard);
 			if (pPos.HasValue) dragCard.Position = GetPeakPosition(pPos.Value.r, pPos.Value.c);
 		}
 	}
@@ -308,6 +323,7 @@ public partial class TriPeaksView : BaseGameView
 	{
 		if (_state.Stock.Count > 0)
 		{
+			_undoStack.Push(_state.Clone());
 			var model = _state.Stock[^1];
 			_state.Stock.RemoveAt(_state.Stock.Count - 1);
 			_state.Waste.Add(model);
@@ -320,7 +336,7 @@ public partial class TriPeaksView : BaseGameView
 
 	private void MoveToWaste(Card card)
 	{
-		var pPos = GetPyramidPos(card);
+		var pPos = GetPeakPos(card);
 		if (pPos.HasValue)
 		{
 			_state.Peaks[pPos.Value.r][pPos.Value.c] = null;
@@ -337,12 +353,12 @@ public partial class TriPeaksView : BaseGameView
 	{
 		if (card.CurrentPile == _wastePile) return card == _wastePile.TopCard;
 		if (card.CurrentPile == _stockPile) return card == _stockPile.TopCard;
-		var pos = GetPyramidPos(card);
+		var pos = GetPeakPos(card);
 		if (pos == null) return false;
 		return TriPeaksEngine.IsExposed(pos.Value.r, pos.Value.c, _state);
 	}
 
-	private (int r, int c)? GetPyramidPos(Card card)
+	private (int r, int c)? GetPeakPos(Card card)
 	{
 		foreach (var kvp in _peaksCards) if (kvp.Value == card) return kvp.Key;
 		return null;
@@ -353,8 +369,14 @@ public partial class TriPeaksView : BaseGameView
 	private void UpdateGameState()
 	{
 		UpdateCardVisuals();
-		SaveManager.SaveGame("TriPeaks", _state);
+		SaveGame();
 		if (TriPeaksEngine.IsWon(_state)) EnterWinState();
+	}
+
+	private void SaveGame()
+	{
+		SaveManager.SaveGame("TriPeaks", _state);
+		_menu.SetUndoEnabled(_undoStack.Count > 0);
 	}
 
 	private void UpdateCardVisuals()

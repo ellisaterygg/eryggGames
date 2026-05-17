@@ -121,6 +121,8 @@ public abstract partial class BaseGameView : Node2D
 
     protected virtual void HandleMouseButtonPressed(Vector2 globalPos)
     {
+        if (_dragCards.Count > 0) return;
+
         var card = GetCardAt(globalPos);
         if (card == null)
         {
@@ -142,13 +144,16 @@ public abstract partial class BaseGameView : Node2D
 
     protected virtual void HandleMouseMotion(Vector2 globalPos)
     {
-        if (!_isDrag && globalPos.DistanceTo(_dragStartPos) > 15f)
+        if (!_isDrag && globalPos.DistanceTo(_dragStartPos) > 10f)
         {
             _isDrag = true;
         }
 
-        for (int i = 0; i < _dragCards.Count; i++)
-            _dragCards[i].Position = globalPos + _dragOffsets[i];
+        if (_isDrag)
+        {
+            for (int i = 0; i < _dragCards.Count; i++)
+                _dragCards[i].Position = globalPos + _dragOffsets[i];
+        }
     }
 
     protected virtual void HandleMouseButtonReleased(Vector2 globalPos)
@@ -185,6 +190,9 @@ public abstract partial class BaseGameView : Node2D
             _dragOriginPile = null;
         }
 
+        // IMPORTANT: Snap current state BEFORE we start removing cards from their logical piles
+        OnBeforeDragStarted();
+
         var globalPositions = new Vector2[count];
         List<Card> cards;
         
@@ -201,8 +209,6 @@ public abstract partial class BaseGameView : Node2D
         }
 
         _dragOffsets = new Vector2[count];
-        OnBeforeDragStarted();
-
         for (int i = 0; i < count; i++)
         {
             AddChild(cards[i]);

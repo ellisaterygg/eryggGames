@@ -23,8 +23,16 @@ public partial class FreeCellView : BaseGameView
 	private readonly Stack<FreeCellState> _undoStack = new();
 	private Dictionary<(Suit, Rank), Card> _cardLookup = new();
 	private List<(Suit suit, Rank rank)>? _dealOrder;
+	private System.Threading.CancellationTokenSource? _autoCompleteCts;
 
 	// ── Lifecycle ──────────────────────────────────────────────────────────
+
+	private void CancelAutoComplete()
+	{
+		_autoCompleteCts?.Cancel();
+		_autoCompleteCts = null;
+		_autoCompleteShown = false;
+	}
 
 	protected override void SetupGame()
 	{
@@ -62,10 +70,15 @@ public partial class FreeCellView : BaseGameView
 		}
 	}
 
-	protected override void NewGame() => DealCards();
-	protected override void RestartGame() => DealCards(_dealOrder);
+	protected override void NewGame() { 
+		CancelAutoComplete();
+		LoadBackground();
+		DealCards(); 
+	}
+	protected override void RestartGame() { CancelAutoComplete(); DealCards(_dealOrder); }
 	protected override void UndoMove()
 	{
+		CancelAutoComplete();
 		if (_undoStack.Count > 0)
 		{
 			ApplyState(_undoStack.Pop());
@@ -243,6 +256,8 @@ public partial class FreeCellView : BaseGameView
 
 	private void ApplyState(FreeCellState snap)
 	{
+		foreach (var card in _cardLookup.Values) card.Visible = false;
+
 		foreach (var pile in _freeCells.Concat(_foundations).Concat(_tableau))
 			while (!pile.IsEmpty)
 				pile.RemoveTopCard();
@@ -288,30 +303,48 @@ public partial class FreeCellView : BaseGameView
 		center.SetAnchorsPreset(Control.LayoutPreset.FullRect);
 		popup.AddChild(center);
 
-		var panel = new PanelContainer { CustomMinimumSize = new Vector2(300, 150) };
+		var panel = new PanelContainer { CustomMinimumSize = new Vector2(500, 250) };
 		center.AddChild(panel);
 
-		var vBox = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
-		panel.AddChild(vBox);
+		var margin = new MarginContainer();
+		margin.AddThemeConstantOverride("margin_top", 30);
+		margin.AddThemeConstantOverride("margin_bottom", 30);
+		margin.AddThemeConstantOverride("margin_left", 30);
+		margin.AddThemeConstantOverride("margin_right", 30);
+		panel.AddChild(margin);
 
-		vBox.AddChild(new Label { Text = "Auto-complete available!", HorizontalAlignment = HorizontalAlignment.Center });
+		var vBox = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+		vBox.AddThemeConstantOverride("separation", 30);
+		margin.AddChild(vBox);
+
+		var label = new Label { Text = "Auto-complete available!", HorizontalAlignment = HorizontalAlignment.Center };
+		label.AddThemeFontSizeOverride("font_size", 32);
+		vBox.AddChild(label);
 		
-		var btn = new Button { Text = "Finish Game" };
+		var btn = new Button { Text = "Finish Game", CustomMinimumSize = new Vector2(250, 70) };
+		btn.AddThemeFontSizeOverride("font_size", 24);
 		btn.Pressed += () => {
 			popup.QueueFree();
 			RunAutoComplete();
 		};
 		vBox.AddChild(btn);
 
-		var cancel = new Button { Text = "Not now" };
+		var cancel = new Button { Text = "Not now", CustomMinimumSize = new Vector2(150, 60) };
+		cancel.AddThemeFontSizeOverride("font_size", 20);
 		cancel.Pressed += () => popup.QueueFree();
 		vBox.AddChild(cancel);
 	}
 
 	private async void RunAutoComplete()
 	{
+		_autoCompleteCts?.Cancel();
+		_autoCompleteCts = new();
+		var token = _autoCompleteCts.Token;
+
 		while (FreeCellEngine.CanAutoComplete(CaptureState()))
 		{
+			if (token.IsCancellationRequested) return;
+
 			var state = CaptureState();
 			var move = FreeCellEngine.GetAutoCompleteMove(state);
 			if (move == null) break;
@@ -331,12 +364,17 @@ public partial class FreeCellView : BaseGameView
 			}
 
 			await ToSignal(GetTree().CreateTimer(0.05f), SceneTreeTimer.SignalName.Timeout);
+			if (token.IsCancellationRequested) return;
+
 			if (FreeCellEngine.IsWon(CaptureState()))
 			{
 				EnterWinState();
 				break;
 			}
 		}
-		SaveManager.SaveGame("FreeCell", CaptureState());
+		if (!token.IsCancellationRequested)
+		{
+			SaveManager.SaveGame("FreeCell", CaptureState());
+		}
 	}
 }
