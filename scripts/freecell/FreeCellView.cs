@@ -18,7 +18,6 @@ public partial class FreeCellView : BaseGameView
 	private readonly Label[]    _foundationLabels = new Label[4];
 
 	private PackedScene _cardScene = null!;
-	private bool          _autoCompleteShown;
 	private FreeCellState? _pendingSnapshot;
 	private readonly Stack<FreeCellState> _undoStack = new();
 	private Dictionary<(Suit, Rank), Card> _cardLookup = new();
@@ -31,7 +30,6 @@ public partial class FreeCellView : BaseGameView
 	{
 		_autoCompleteCts?.Cancel();
 		_autoCompleteCts = null;
-		_autoCompleteShown = false;
 	}
 
 	protected override void SetupGame()
@@ -87,12 +85,85 @@ public partial class FreeCellView : BaseGameView
 		}
 	}
 
+	protected override void HandleMouseButtonDoubleClicked(Vector2 globalPos)
+	{
+		if (_gameWon) return;
+		if (GetCardAt(globalPos) != null) return;
+		RunSafeAutoMove();
+	}
+
+	private async void RunSafeAutoMove()
+	{
+		_autoCompleteCts?.Cancel();
+		_autoCompleteCts = new();
+		var token = _autoCompleteCts.Token;
+
+		bool totalProgress = false;
+		bool movedAny;
+
+		do
+		{
+			movedAny = false;
+			var currentState = CaptureState();
+			var sourcePiles = _tableau.Concat(_freeCells).Where(p => !p.IsEmpty).ToList();
+
+			foreach (var pile in sourcePiles)
+			{
+				if (token.IsCancellationRequested) return;
+
+				var card = pile.TopCard!;
+				var model = new CardModel(card.Suit, card.Rank);
+
+				if (FreeCellEngine.IsSafeToMoveToFoundation(currentState, model))
+				{
+					for (int i = 0; i < 4; i++)
+					{
+						if (FreeCellEngine.CanMove(currentState, new[] { model }, PileType.Foundation, i).IsValid)
+						{
+							if (!totalProgress)
+							{
+								_undoStack.Push(currentState.Clone());
+								totalProgress = true;
+							}
+
+							var removedCard = pile.RemoveTopCard()!;
+							_foundations[i].AddCard(removedCard);
+							
+							if (_foundations[i].Count == 1)
+							{
+								_foundations[i].FoundationSuit = removedCard.Suit;
+								_foundationLabels[i].Text = SuitSymbol(removedCard.Suit);
+							}
+
+							movedAny = true;
+							break;
+						}
+					}
+				}
+				if (movedAny) break;
+			}
+
+			if (movedAny)
+			{
+				await ToSignal(GetTree().CreateTimer(0.05f), SceneTreeTimer.SignalName.Timeout);
+				if (token.IsCancellationRequested) return;
+			}
+
+		} while (movedAny);
+
+		if (totalProgress && !token.IsCancellationRequested)
+		{
+			var state = CaptureState();
+			SaveManager.SaveGame("FreeCell", state);
+			_menu.SetUndoEnabled(_undoStack.Count > 0);
+			if (FreeCellEngine.IsWon(state)) EnterWinState();
+		}
+	}
+
 	// ── Rules ──────────────────────────────────────────────────────────────
 
 	protected override bool ShouldAllowDrag(Card card)
 	{
-		if (_autoCompleteShown) return false;
-		
 		var pile = card.CurrentPile;
 		if (pile == null) return false;
 		int idx = pile.Cards.IndexOf(card);
@@ -151,7 +222,6 @@ public partial class FreeCellView : BaseGameView
 			SaveManager.SaveGame("FreeCell", state);
 			_menu.SetUndoEnabled(_undoStack.Count > 0);
 			if (FreeCellEngine.IsWon(state)) EnterWinState();
-			else if (!_autoCompleteShown && FreeCellEngine.CanAutoComplete(state)) ShowAutoCompleteDialog();
 		}
 	}
 
@@ -220,7 +290,6 @@ public partial class FreeCellView : BaseGameView
 		}
 
 		_undoStack.Clear();
-		_autoCompleteShown = false;
 
 		if (order == null)
 		{
@@ -291,90 +360,5 @@ public partial class FreeCellView : BaseGameView
 				? SuitSymbol(s) : "?";
 		}
 		_gameWon = snap.IsFinished;
-	}
-
-	private void ShowAutoCompleteDialog()
-	{
-		_autoCompleteShown = true;
-		var popup = new CanvasLayer { Layer = 10 };
-		AddChild(popup);
-
-		var center = new CenterContainer();
-		center.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-		popup.AddChild(center);
-
-		var panel = new PanelContainer { CustomMinimumSize = new Vector2(500, 250) };
-		center.AddChild(panel);
-
-		var margin = new MarginContainer();
-		margin.AddThemeConstantOverride("margin_top", 30);
-		margin.AddThemeConstantOverride("margin_bottom", 30);
-		margin.AddThemeConstantOverride("margin_left", 30);
-		margin.AddThemeConstantOverride("margin_right", 30);
-		panel.AddChild(margin);
-
-		var vBox = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
-		vBox.AddThemeConstantOverride("separation", 30);
-		margin.AddChild(vBox);
-
-		var label = new Label { Text = "Auto-complete available!", HorizontalAlignment = HorizontalAlignment.Center };
-		label.AddThemeFontSizeOverride("font_size", 32);
-		vBox.AddChild(label);
-		
-		var btn = new Button { Text = "Finish Game", CustomMinimumSize = new Vector2(250, 70) };
-		btn.AddThemeFontSizeOverride("font_size", 24);
-		btn.Pressed += () => {
-			popup.QueueFree();
-			RunAutoComplete();
-		};
-		vBox.AddChild(btn);
-
-		var cancel = new Button { Text = "Not now", CustomMinimumSize = new Vector2(150, 60) };
-		cancel.AddThemeFontSizeOverride("font_size", 20);
-		cancel.Pressed += () => popup.QueueFree();
-		vBox.AddChild(cancel);
-	}
-
-	private async void RunAutoComplete()
-	{
-		_autoCompleteCts?.Cancel();
-		_autoCompleteCts = new();
-		var token = _autoCompleteCts.Token;
-
-		while (FreeCellEngine.CanAutoComplete(CaptureState()))
-		{
-			if (token.IsCancellationRequested) return;
-
-			var state = CaptureState();
-			var move = FreeCellEngine.GetAutoCompleteMove(state);
-			if (move == null) break;
-
-			Card? card = null;
-			if (move.FromType == PileType.Tableau) card = _tableau[move.FromIdx].RemoveTopCard();
-			else card = _freeCells[move.FromIdx].RemoveTopCard();
-
-			if (card == null) break;
-
-			_foundations[move.ToIdx].AddCard(card);
-			
-			if (_foundations[move.ToIdx].Count == 1)
-			{
-				_foundations[move.ToIdx].FoundationSuit = card.Suit;
-				_foundationLabels[move.ToIdx].Text = SuitSymbol(card.Suit);
-			}
-
-			await ToSignal(GetTree().CreateTimer(0.05f), SceneTreeTimer.SignalName.Timeout);
-			if (token.IsCancellationRequested) return;
-
-			if (FreeCellEngine.IsWon(CaptureState()))
-			{
-				EnterWinState();
-				break;
-			}
-		}
-		if (!token.IsCancellationRequested)
-		{
-			SaveManager.SaveGame("FreeCell", CaptureState());
-		}
 	}
 }
