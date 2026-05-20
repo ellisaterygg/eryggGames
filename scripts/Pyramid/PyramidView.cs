@@ -380,7 +380,13 @@ public partial class PyramidView : BaseGameView
 		else
 		{
 			// Was in the pyramid (dictionary managed)
-			GetNode("PyramidContainer").AddChild(dragCard);
+			var container = GetNode<Node2D>("PyramidContainer");
+			if (dragCard.GetParent() != container)
+			{
+				dragCard.GetParent()?.RemoveChild(dragCard);
+				container.AddChild(dragCard);
+			}
+			
 			var pPos = GetPyramidPos(dragCard);
 			if (pPos.HasValue) dragCard.Position = GetPyramidPosition(pPos.Value.r, pPos.Value.c);
 		}
