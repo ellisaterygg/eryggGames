@@ -12,6 +12,7 @@ public abstract partial class BaseGameView : Node2D
     protected GameMenu _menu = null!;
     protected CanvasLayer? _winOverlay;
     protected bool _gameWon;
+    protected string _currentBackgroundFile = "";
 
     // Common Drag State
     protected readonly List<Card> _dragCards = new();
@@ -51,13 +52,15 @@ public abstract partial class BaseGameView : Node2D
         launcher?.SwitchGame("Launcher");
     }
 
-    protected void LoadBackground()
+    protected string LoadBackground(string? fileName = null)
     {
         var bg = GetNodeOrNull<Sprite2D>("Background");
         if (bg != null)
         {
-            BackgroundManager.LoadRandomBackground(bg);
+            _currentBackgroundFile = BackgroundManager.ApplyBackground(bg, fileName);
+            return _currentBackgroundFile;
         }
+        return "";
     }
 
     protected float GetTopSafeInset()

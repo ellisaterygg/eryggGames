@@ -14,6 +14,7 @@ public class PyramidState
 	public int DeckPasses { get; set; } = 0;
 	public bool IsFinished { get; set; }
 	public bool WinnableOnly { get; set; } = true;
+	public string? BackgroundFile { get; set; }
 
 	public PyramidState()
 	{
@@ -34,6 +35,7 @@ public class PyramidState
 		clone.DeckPasses = DeckPasses;
 		clone.IsFinished = IsFinished;
 		clone.WinnableOnly = WinnableOnly;
+		clone.BackgroundFile = BackgroundFile;
 		return clone;
 	}
 }

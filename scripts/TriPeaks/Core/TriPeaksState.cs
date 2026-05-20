@@ -16,6 +16,7 @@ public class TriPeaksState
 
     public bool IsFinished { get; set; }
     public bool WinnableOnly { get; set; } = true;
+    public string? BackgroundFile { get; set; }
 
     public TriPeaksState()
     {
@@ -33,6 +34,7 @@ public class TriPeaksState
         clone.Waste = Waste.ToList();
         clone.IsFinished = IsFinished;
         clone.WinnableOnly = WinnableOnly;
+        clone.BackgroundFile = BackgroundFile;
         for (int i = 0; i < 4; i++)
         {
             for (int j = 0; j < Peaks[i].Length; j++)

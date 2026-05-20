@@ -60,17 +60,17 @@ public partial class KlondikeView : BaseGameView
 		}
 
 		CreateAllCards();
+var saved = SaveManager.LoadGame<KlondikeState>("Klondike");
+if (saved != null && !saved.IsFinished)
+{
+	_state = saved;
+	ApplyState(_state);
+}
+else
+{
+	NewGame();
+}
 
-		var saved = SaveManager.LoadGame<KlondikeState>("Klondike");
-		if (saved != null && !saved.IsFinished)
-		{
-			_state = saved;
-			ApplyState(_state);
-		}
-		else
-		{
-			NewGame();
-		}
 		SetupOptionsMenu();
 	}
 
@@ -276,6 +276,7 @@ public partial class KlondikeView : BaseGameView
 
 	private void ApplyState(KlondikeState snap)
 	{
+		LoadBackground(snap.BackgroundFile);
 		foreach (var card in _cardLookup.Values) card.Visible = false;
 		foreach (var p in GetPilesForInput()) while (!p.IsEmpty) p.RemoveTopCard();
 
@@ -449,7 +450,8 @@ public partial class KlondikeView : BaseGameView
 		var snap = new KlondikeState { 
 			DrawCount = _state.DrawCount, 
 			IsFinished = _gameWon, 
-			InitialDeal = _state.InitialDeal.ToList() 
+			InitialDeal = _state.InitialDeal.ToList(),
+			BackgroundFile = _currentBackgroundFile
 		};
 		for (int i = 0; i < 7; i++)
 		{

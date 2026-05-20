@@ -153,6 +153,7 @@ public partial class PyramidView : BaseGameView
 		_state.Waste.Clear();
 		_state.DeckPasses = 0;
 		_state.IsFinished = false;
+		_state.BackgroundFile = _currentBackgroundFile;
 		for (int r = 0; r < 7; r++)
 			for (int c = 0; c <= r; c++) _state.Pyramid[r][c] = null;
 

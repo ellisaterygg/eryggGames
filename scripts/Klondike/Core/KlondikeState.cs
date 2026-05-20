@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using EryggGames.Core;
 
 namespace EryggGames.Klondike.Core;
@@ -19,10 +20,32 @@ public class KlondikeState
 
     // Settings
     public int DrawCount { get; set; } = 3; // 1 or 3
+    public string? BackgroundFile { get; set; }
 
     public KlondikeState()
     {
         for (int i = 0; i < 7; i++) Tableau[i] = new();
         for (int i = 0; i < 4; i++) Foundation[i] = new();
+    }
+
+    public KlondikeState Clone()
+    {
+        var clone = new KlondikeState
+        {
+            Stock = Stock.ToList(),
+            Waste = Waste.ToList(),
+            IsFinished = IsFinished,
+            InitialDeal = InitialDeal.ToList(),
+            DrawCount = DrawCount,
+            BackgroundFile = BackgroundFile
+        };
+        for (int i = 0; i < 7; i++)
+        {
+            clone.Tableau[i] = Tableau[i].ToList();
+            clone.TableauFaceDown[i] = TableauFaceDown[i];
+        }
+        for (int i = 0; i < 4; i++)
+            clone.Foundation[i] = Foundation[i].ToList();
+        return clone;
     }
 }

@@ -29,17 +29,17 @@ public partial class TriPeaksView : BaseGameView
 #endif
 		_cardScene = GD.Load<PackedScene>("res://scenes/Shared/Card.tscn");
 		SetupPiles();
+var saved = SaveManager.LoadGame<TriPeaksState>("TriPeaks");
+if (saved != null && !saved.IsFinished)
+{
+	_state = saved;
+	ApplyState(_state);
+}
+else
+{
+	NewGame();
+}
 
-		var saved = SaveManager.LoadGame<TriPeaksState>("TriPeaks");
-		if (saved != null && !saved.IsFinished)
-		{
-			_state = saved;
-			ApplyState(_state);
-		}
-		else
-		{
-			NewGame();
-		}
 		SetupOptionsMenu();
 	}
 
@@ -138,6 +138,7 @@ public partial class TriPeaksView : BaseGameView
 	{
 		_state.Stock.Clear();
 		_state.Waste.Clear();
+		_state.BackgroundFile = _currentBackgroundFile;
 		for (int i = 0; i < 4; i++)
 		{
 			for (int j = 0; j < _state.Peaks[i].Length; j++) _state.Peaks[i][j] = null;
@@ -162,6 +163,7 @@ public partial class TriPeaksView : BaseGameView
 	private void ApplyState(TriPeaksState state)
 	{
 		_state = state;
+		LoadBackground(_state.BackgroundFile);
 		ClearBoard();
 
 		var container = GetNode("PeaksContainer");

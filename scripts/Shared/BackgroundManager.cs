@@ -1,5 +1,6 @@
 using Godot;
 using System;
+using System.Linq;
 
 namespace EryggGames.Shared;
 
@@ -196,19 +197,36 @@ public static class BackgroundManager
         "PXL_20250728_082913030.jpg",
     };
 
-    public static void LoadRandomBackground(Sprite2D bg)
+    public static string ApplyBackground(Sprite2D bg, string? fileName = null)
     {
-        int idx = GD.RandRange(0, BackgroundFiles.Length - 1);
-        var path = $"res://assets/backgrounds/{BackgroundFiles[idx]}";
+        if (string.IsNullOrEmpty(fileName) || !BackgroundFiles.Contains(fileName))
+        {
+            int idx = GD.RandRange(0, BackgroundFiles.Length - 1);
+            fileName = BackgroundFiles[idx];
+        }
+
+        var path = $"res://assets/backgrounds/{fileName}";
         var texture = ResourceLoader.Load<Texture2D>(path);
-        if (texture == null) return;
+        
+        if (texture == null)
+        {
+            // Final fallback if the requested file failed
+            int idx = GD.RandRange(0, BackgroundFiles.Length - 1);
+            fileName = BackgroundFiles[idx];
+            path = $"res://assets/backgrounds/{fileName}";
+            texture = ResourceLoader.Load<Texture2D>(path);
+        }
 
-        bg.Texture = texture;
+        if (texture != null)
+        {
+            bg.Texture = texture;
+            var vpSize  = bg.GetViewport().GetVisibleRect().Size;
+            var texSize = texture.GetSize();
+            float scale = Math.Max(vpSize.X / texSize.X, vpSize.Y / texSize.Y);
+            bg.Scale    = new Vector2(scale, scale);
+            bg.Position = vpSize / 2;
+        }
 
-        var vpSize  = bg.GetViewport().GetVisibleRect().Size;
-        var texSize = texture.GetSize();
-        float scale = Math.Max(vpSize.X / texSize.X, vpSize.Y / texSize.Y);
-        bg.Scale    = new Vector2(scale, scale);
-        bg.Position = vpSize / 2;
+        return fileName;
     }
 }
