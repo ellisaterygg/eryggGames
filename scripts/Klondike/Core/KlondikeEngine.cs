@@ -42,4 +42,40 @@ public static class KlondikeEngine
     {
         return state.Foundation.All(f => f.Count == 13);
     }
+
+    public static bool IsSafeToMoveToFoundation(KlondikeState state, CardModel card)
+    {
+        // Aces and Twos are always safe
+        if (card.Rank <= Rank.Two) return true;
+
+        // A card of rank R is safe to move if it is no longer "useful" as a base for stacks.
+        // For Klondike, a card is useless if all cards of rank R-1 that could sit on it 
+        // (which must be of the opposite color) are already foundation-ready.
+        // A card is foundation-ready if its rank R-2 is already filled in the foundation.
+        
+        int requiredRank = (int)card.Rank - 2;
+        
+        // Find the ranks of the foundations for the opposite color suits
+        // Clubs/Spades are black, Hearts/Diamonds are red.
+        bool isRed = card.IsRed;
+        
+        int minOppositeRank = 13;
+        for (int i = 0; i < 4; i++)
+        {
+            var foundation = state.Foundation[i];
+            if (foundation.Count == 0)
+            {
+                minOppositeRank = 0;
+                break;
+            }
+            
+            var topCard = foundation[^1];
+            if (topCard.IsRed != isRed)
+            {
+                minOppositeRank = Math.Min(minOppositeRank, foundation.Count);
+            }
+        }
+
+        return minOppositeRank >= requiredRank;
+    }
 }
