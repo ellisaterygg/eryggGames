@@ -40,17 +40,17 @@ public partial class FreeCellView : BaseGameView
 		_cardScene  = GD.Load<PackedScene>("res://scenes/Shared/Card.tscn");
 		SetupPiles();
 		CreateAllCards(); 
+var saved = SaveManager.LoadGame<FreeCellState>("FreeCell");
+if (saved != null && !saved.IsFinished)
+{
+	ApplyState(saved);
+}
+else
+{
+	DealCards();
+}
+}
 
-		var saved = SaveManager.LoadGame<FreeCellState>("FreeCell");
-		if (saved != null && !saved.IsFinished)
-		{
-			ApplyState(saved);
-		}
-		else
-		{
-			DealCards();
-		}
-	}
 
 	private void CreateAllCards()
 	{
@@ -165,7 +165,7 @@ public partial class FreeCellView : BaseGameView
 	protected override bool ShouldAllowDrag(Card card)
 	{
 		var pile = card.CurrentPile;
-		if (pile == null) return false;
+		if (pile == null || pile.PileType == PileType.Foundation) return false;
 		int idx = pile.Cards.IndexOf(card);
 
 		if (pile.PileType == PileType.Tableau && idx < pile.Count - 1)
@@ -311,7 +311,10 @@ public partial class FreeCellView : BaseGameView
 
 	private FreeCellState CaptureState()
 	{
-		var state = new FreeCellState { IsFinished = _gameWon };
+		var state = new FreeCellState { 
+			IsFinished = _gameWon,
+			BackgroundFile = _currentBackgroundFile
+		};
 		for (int i = 0; i < 8; i++)
 			state.Tableau[i] = _tableau[i].Cards.Select(c => new CardModel(c.Suit, c.Rank)).ToList();
 		for (int i = 0; i < 4; i++)
