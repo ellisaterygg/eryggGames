@@ -108,7 +108,8 @@ public abstract partial class BaseGameView : Node2D
         switch (@event)
         {
             case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } mb:
-                HandleMouseButtonPressed(mb.GlobalPosition);
+                if (mb.DoubleClick) HandleMouseButtonDoubleClicked(mb.GlobalPosition);
+                else HandleMouseButtonPressed(mb.GlobalPosition);
                 break;
             case InputEventMouseMotion mm when _dragCards.Count > 0:
                 HandleMouseMotion(mm.GlobalPosition);
@@ -118,6 +119,8 @@ public abstract partial class BaseGameView : Node2D
                 break;
         }
     }
+
+    protected virtual void HandleMouseButtonDoubleClicked(Vector2 globalPos) { }
 
     protected virtual void HandleMouseButtonPressed(Vector2 globalPos)
     {

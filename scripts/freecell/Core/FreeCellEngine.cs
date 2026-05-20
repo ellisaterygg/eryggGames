@@ -115,6 +115,25 @@ public static class FreeCellEngine
 		return tempState.Tableau.All(p => p.Count == 0) && tempState.FreeCells.All(p => p.Count == 0);
 	}
 
+	public static bool IsSafeToMoveToFoundation(FreeCellState state, CardModel card)
+	{
+		// Aces and Twos are always safe to move to foundations in FreeCell
+		if (card.Rank <= Rank.Two) return true;
+
+		// A card of rank R is safe to move if it is no longer "useful" as a base for stacks.
+		// It is useless if all cards of rank R-1 that could sit on it are already "foundation-ready".
+		// A card is foundation-ready if its slot (rank R-2) is already filled in the foundation.
+		// To be absolutely safe and match user preference, we check if ALL 4 suits have reached R-2.
+		int requiredRank = (int)card.Rank - 2;
+		
+		for (int i = 0; i < 4; i++)
+		{
+			if (state.Foundations[i].Count < requiredRank) return false;
+		}
+
+		return true;
+	}
+
 	public record AutoCompleteMove(PileType FromType, int FromIdx, int ToIdx);
 
 	public static AutoCompleteMove? GetAutoCompleteMove(FreeCellState state)

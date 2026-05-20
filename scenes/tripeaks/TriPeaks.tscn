@@ -10,10 +10,10 @@ z_index = -1
 modulate = Color(0.65, 0.65, 0.65, 1)
 
 [node name="PeaksContainer" type="Node2D" parent="."]
-position = Vector2(150, 640)
+position = Vector2(300, 640)
 
 [node name="Stock" type="Node2D" parent="."]
-position = Vector2(600, 450)
+position = Vector2(120, 450)
 
 [node name="Waste" type="Node2D" parent="."]
-position = Vector2(600, 800)
+position = Vector2(120, 800)
