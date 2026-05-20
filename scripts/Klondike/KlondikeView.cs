@@ -327,7 +327,8 @@ else
 
 	protected override bool ShouldAllowDrag(Card card)
 	{
-		if (card.CurrentPile == _stockPile) return false;
+		var pile = card.CurrentPile;
+		if (pile == null || pile == _stockPile || pile.PileType == PileType.Foundation) return false;
 		return card.IsFaceUp;
 	}
 
