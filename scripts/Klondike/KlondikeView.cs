@@ -24,6 +24,9 @@ public partial class KlondikeView : BaseGameView
 	private List<GameOption> _options = new();
 	private System.Threading.CancellationTokenSource? _autoMoveCts;
 
+	protected override bool ShowUndoButton => true;
+	protected override bool IsGameInProgress => _undoStack.Count > 0 && !_gameWon;
+
 	protected override void SetupGame()
 	{
 		_cardScene = GD.Load<PackedScene>("res://scenes/Shared/Card.tscn");

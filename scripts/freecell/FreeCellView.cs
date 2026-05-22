@@ -26,6 +26,9 @@ public partial class FreeCellView : BaseGameView
 
 	// ── Lifecycle ──────────────────────────────────────────────────────────
 
+	protected override bool ShowUndoButton => true;
+	protected override bool IsGameInProgress => _undoStack.Count > 0 && !_gameWon;
+
 	private void CancelAutoComplete()
 	{
 		_autoCompleteCts?.Cancel();

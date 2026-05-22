@@ -25,6 +25,12 @@ public partial class GameMenu : CanvasLayer
     private List<GameOption> _currentOptions = new();
     private Dictionary<string, List<CheckBox>> _optionRadioGroups = new();
 
+    private Control _confirmOverlay = null!;
+    private Label _confirmLabel = null!;
+    private Action? _onConfirmAction;
+    private Button _applyNextBtn = null!;
+    private bool _isGameOver;
+
     private Button _undoBtn = null!;
 
     public void Setup(float topInset, bool showUndo = true)
@@ -50,6 +56,66 @@ public partial class GameMenu : CanvasLayer
         bar.AddChild(MakeMenuButton("Games",   new Vector2(585, btnY), () => EmitSignal(SignalName.GamesRequested)));
 
         SetupOptionsOverlay();
+        SetupConfirmOverlay();
+    }
+
+    public void SetGameOver(bool isOver)
+    {
+        _isGameOver = isOver;
+    }
+
+    public void ShowConfirmation(string message, Action onConfirm)
+    {
+        _confirmLabel.Text = message;
+        _onConfirmAction = onConfirm;
+        _confirmOverlay.Visible = true;
+    }
+
+    private void SetupConfirmOverlay()
+    {
+        _confirmOverlay = new Control { Name = "ConfirmOverlay", Visible = false };
+        _confirmOverlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        AddChild(_confirmOverlay);
+
+        var dim = new ColorRect { Color = new Color(0, 0, 0, 0.75f) };
+        dim.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _confirmOverlay.AddChild(dim);
+
+        var center = new CenterContainer();
+        center.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _confirmOverlay.AddChild(center);
+
+        var panel = new PanelContainer { CustomMinimumSize = new Vector2(500, 300) };
+        center.AddChild(panel);
+
+        var vBox = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        vBox.AddThemeConstantOverride("separation", 40);
+        panel.AddChild(vBox);
+
+        _confirmLabel = new Label { 
+            Text = "Are you sure?", 
+            HorizontalAlignment = HorizontalAlignment.Center,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart
+        };
+        _confirmLabel.AddThemeFontSizeOverride("font_size", 32);
+        vBox.AddChild(_confirmLabel);
+
+        var btnHBox = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        btnHBox.AddThemeConstantOverride("separation", 30);
+        vBox.AddChild(btnHBox);
+
+        var yesBtn = new Button { Text = "Yes", CustomMinimumSize = new Vector2(150, 70) };
+        yesBtn.AddThemeFontSizeOverride("font_size", 24);
+        yesBtn.Pressed += () => {
+            _confirmOverlay.Visible = false;
+            _onConfirmAction?.Invoke();
+        };
+        btnHBox.AddChild(yesBtn);
+
+        var noBtn = new Button { Text = "No", CustomMinimumSize = new Vector2(150, 70) };
+        noBtn.AddThemeFontSizeOverride("font_size", 24);
+        noBtn.Pressed += () => _confirmOverlay.Visible = false;
+        btnHBox.AddChild(noBtn);
     }
 
     public void SetUndoEnabled(bool enabled)
@@ -120,10 +186,10 @@ public partial class GameMenu : CanvasLayer
         applyNowBtn.Pressed += () => ApplyOptions(true);
         btnHBox.AddChild(applyNowBtn);
 
-        var applyNextBtn = new Button { Text = "Apply to Next", CustomMinimumSize = new Vector2(180, 60) };
-        applyNextBtn.AddThemeFontSizeOverride("font_size", 20);
-        applyNextBtn.Pressed += () => ApplyOptions(false);
-        btnHBox.AddChild(applyNextBtn);
+        _applyNextBtn = new Button { Text = "Apply to Next", CustomMinimumSize = new Vector2(180, 60) };
+        _applyNextBtn.AddThemeFontSizeOverride("font_size", 20);
+        _applyNextBtn.Pressed += () => ApplyOptions(false);
+        btnHBox.AddChild(_applyNextBtn);
 
         var cancelBtn = new Button { Text = "Cancel", CustomMinimumSize = new Vector2(120, 60) };
         cancelBtn.AddThemeFontSizeOverride("font_size", 20);
@@ -176,6 +242,7 @@ public partial class GameMenu : CanvasLayer
         _optionsOverlay.Size = vpSize;
         _optionsOverlay.Position = Vector2.Zero;
         _optionsOverlay.Visible = true;
+        _applyNextBtn.Visible = !_isGameOver;
     }
 
     private void HideOptions()

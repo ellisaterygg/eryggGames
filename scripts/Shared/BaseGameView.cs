@@ -25,11 +25,11 @@ public abstract partial class BaseGameView : Node2D
     {
         _topInset = GetTopSafeInset();
         
-        _menu = new GameMenu();
+        _menu = new GameMenu { Layer = 10 };
         AddChild(_menu);
         _menu.Setup(_topInset, ShowUndoButton);
-        _menu.NewGameRequested += NewGame;
-        _menu.RestartGameRequested += RestartGame;
+        _menu.NewGameRequested += OnNewGameRequested;
+        _menu.RestartGameRequested += OnRestartGameRequested;
         _menu.UndoRequested += UndoMove;
         _menu.GamesRequested += ShowGameSelection;
         _menu.OptionsApplied += OnOptionsApplied;
@@ -39,12 +39,37 @@ public abstract partial class BaseGameView : Node2D
     }
 
     protected virtual bool ShowUndoButton => true;
+    protected virtual bool IsGameInProgress => false;
 
     protected abstract void SetupGame();
     protected abstract void NewGame();
     protected abstract void RestartGame();
     protected virtual void UndoMove() { }
     protected virtual void OnOptionsApplied(bool startNewGame) { }
+
+    private void OnNewGameRequested()
+    {
+        if (IsGameInProgress)
+        {
+            _menu.ShowConfirmation("Start a new game? Current progress will be lost.", NewGame);
+        }
+        else
+        {
+            NewGame();
+        }
+    }
+
+    private void OnRestartGameRequested()
+    {
+        if (IsGameInProgress)
+        {
+            _menu.ShowConfirmation("Restart this game? Current progress will be lost.", RestartGame);
+        }
+        else
+        {
+            RestartGame();
+        }
+    }
 
     protected void ShowGameSelection()
     {
@@ -74,6 +99,7 @@ public abstract partial class BaseGameView : Node2D
     protected void EnterWinState(string message = "You Won!")
     {
         _gameWon = true;
+        _menu.SetGameOver(true);
         _winOverlay = new CanvasLayer { Layer = 5 };
         AddChild(_winOverlay);
         
@@ -98,6 +124,7 @@ public abstract partial class BaseGameView : Node2D
     protected void ExitWinState()
     {
         _gameWon = false;
+        _menu.SetGameOver(false);
         _winOverlay?.QueueFree();
         _winOverlay = null;
     }

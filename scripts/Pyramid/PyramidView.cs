@@ -24,6 +24,9 @@ public partial class PyramidView : BaseGameView
 
 	private List<GameOption> _options = new();
 
+	protected override bool ShowUndoButton => true;
+	protected override bool IsGameInProgress => _undoStack.Count > 0 && !_gameWon;
+
 	protected override void SetupGame()
 	{
 #if DEBUG
