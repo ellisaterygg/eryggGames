@@ -6,7 +6,6 @@ using System.Linq;
 using EryggGames.Core;
 using EryggGames.Shared;
 using EryggGames.Pyramid.Core;
-using EryggGames.Pyramid.Tests;
 
 namespace EryggGames.Pyramid;
 
@@ -33,9 +32,6 @@ public partial class PyramidView : BaseGameView
 
 	protected override void SetupGame()
 	{
-#if DEBUG
-		SolverTests.RunTests();
-#endif
 		_cardScene = GD.Load<PackedScene>("res://scenes/Shared/Card.tscn");
 		SetupPiles();
 
@@ -133,7 +129,7 @@ public partial class PyramidView : BaseGameView
 
 			if (PyramidSolver.IsWinnable(tempState)) break;
 
-		} while (attempts < 200);
+		} while (attempts < 100);
 
 		_state = new PyramidState { 
 			InitialDeal = order,
