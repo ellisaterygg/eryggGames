@@ -20,12 +20,16 @@ public partial class PyramidView : BaseGameView
 	private readonly Stack<PyramidState> _undoStack = new();
 	private PyramidState? _pendingSnapshot;
 	private PackedScene _cardScene = null!;
-	private const int MaxRedeals = 3;
+	private const int MaxRedeals = 2;
 
 	private List<GameOption> _options = new();
 
 	protected override bool ShowUndoButton => true;
 	protected override bool IsGameInProgress => _undoStack.Count > 0 && !_gameWon;
+	protected override bool CanUndo => _undoStack.Count > 0;
+
+	protected override int EntryCost => 50;
+	protected override int WinBonus => _state.WinnableOnly ? 50 : 150;
 
 	protected override void SetupGame()
 	{
@@ -92,11 +96,11 @@ public partial class PyramidView : BaseGameView
 		_wastePile = new CardPile { Name = "WastePile", PileType = PileType.FreeCell };
 		wasteNode.AddChild(_wastePile);
 		
-		stockNode.Position = new Vector2(200, 1100) + safeOffset;
-		wasteNode.Position = new Vector2(400, 1100) + safeOffset;
+		stockNode.Position = new Vector2(200, 950) + safeOffset;
+		wasteNode.Position = new Vector2(400, 950) + safeOffset;
 
 		_redealLabel = new Label { 
-			Position = new Vector2(120, 1170) + safeOffset,
+			Position = new Vector2(120, 1020) + safeOffset,
 			HorizontalAlignment = HorizontalAlignment.Center,
 			Size = new Vector2(160, 40)
 		};
@@ -111,7 +115,6 @@ public partial class PyramidView : BaseGameView
 		ExitWinState();
 		LoadBackground();
 		_undoStack.Clear();
-		_selectedCard = null;
 
 		List<CardModel> order;
 		int attempts = 0;
@@ -144,7 +147,6 @@ public partial class PyramidView : BaseGameView
 	{
 		ExitWinState();
 		_undoStack.Clear();
-		_selectedCard = null;
 		if (_state.InitialDeal.Count == 0) NewGame();
 		else DealFromOrder(_state.InitialDeal);
 		SaveGame();
@@ -252,81 +254,50 @@ public partial class PyramidView : BaseGameView
 
 	protected override void HandleCardClick(Card card)
 	{
-		if (card.CurrentPile == _stockPile)
-		{
-			// Prioritize playing the card if it's a King or matches the current selection
-			if (card.Rank == Rank.King)
-			{
-				_undoStack.Push(_state.Clone());
-				RemoveCard(card);
-				UpdateGameState();
-				return;
-			}
+		if (_gameWon) return;
 
-			if (_selectedCard != null && _selectedCard != card)
-			{
-				if ((int)_selectedCard.Rank + (int)card.Rank == 13)
-				{
-					_undoStack.Push(_state.Clone());
-					RemoveCard(_selectedCard);
-					RemoveCard(card);
-					_selectedCard = null;
-					UpdateGameState();
-					return;
-				}
-			}
+		if (!IsCardExposed(card)) return;
 
-			// If no direct play was possible, draw to waste
-			DrawFromStock();
-		}
-		else if (card.Rank == Rank.King && IsCardExposed(card))
+		if (card.Rank == Rank.King)
 		{
 			_undoStack.Push(_state.Clone());
 			RemoveCard(card);
 			UpdateGameState();
+			return;
 		}
-		else if (IsCardExposed(card))
+
+		if (card.CurrentPile == _stockPile)
 		{
-			// Tap matching logic
-			if (_selectedCard == null)
-			{
-				_selectedCard = card;
-				card.Modulate = new Color(0.7f, 1f, 0.7f);
-			}
-			else if (_selectedCard == card)
-			{
-				_selectedCard = null;
-				card.Modulate = Colors.White;
-			}
-			else
-			{
-				if ((int)_selectedCard.Rank + (int)card.Rank == 13)
-				{
-					_undoStack.Push(_state.Clone());
-					RemoveCard(_selectedCard);
-					RemoveCard(card);
-					_selectedCard = null;
-					UpdateGameState();
-				}
-				else
-				{
-					_selectedCard.Modulate = Colors.White;
-					_selectedCard = card;
-					card.Modulate = new Color(0.7f, 1f, 0.7f);
-				}
-			}
+			DrawFromStock();
 		}
 	}
 
-	private Card? _selectedCard;
+	protected override void HandleMouseButtonDoubleClicked(Vector2 globalPos)
+	{
+		if (_gameWon) return;
+		var card = GetCardAt(globalPos);
+		if (card != null)
+		{
+			HandleCardClick(card);
+		}
+		else if (IsPointInPile(globalPos, _stockPile))
+		{
+			DrawFromStock();
+		}
+	}
 
-	protected override void OnBeforeDragStarted() => _pendingSnapshot = _state.Clone();
+	protected override void OnBeforeDragStarted()
+	{
+		_pendingSnapshot = _state.Clone();
+	}
 
-	protected override void OnDragEnded(bool valid) => _pendingSnapshot = null;
+	protected override void OnDragEnded(bool valid, CardPile? target) => _pendingSnapshot = null;
 
 	protected override void BeginDrag(Card card, Vector2 globalMousePos)
 	{
-		if (card.Rank == Rank.King && IsCardExposed(card))
+		if (!IsCardExposed(card)) return;
+
+		if (card.Rank == Rank.King)
 		{
 			_undoStack.Push(_state.Clone());
 			RemoveCard(card);
@@ -354,7 +325,6 @@ public partial class PyramidView : BaseGameView
 			if ((int)dragCard.Rank + (int)targetCard.Rank == 13)
 			{
 				if (_pendingSnapshot != null) _undoStack.Push(_pendingSnapshot);
-				// Remove target first to avoid any potential side effects from removing the dragging card
 				RemoveCard(targetCard);
 				RemoveCard(dragCard);
 				valid = true;
@@ -410,6 +380,7 @@ public partial class PyramidView : BaseGameView
 
 	private void RemoveCard(Card card)
 	{
+		RewardPoints(1);
 		var pos = GetPyramidPos(card);
 		if (pos.HasValue)
 		{
@@ -490,20 +461,6 @@ public partial class PyramidView : BaseGameView
 				}
 			}
 
-			// Auto-draw the first card after recycling to show immediate progress
-			if (_state.Stock.Count > 0)
-			{
-				var m = _state.Stock[^1];
-				_state.Stock.RemoveAt(_state.Stock.Count - 1);
-				_state.Waste.Add(m);
-				var c = _stockPile.RemoveTopCard();
-				if (c != null)
-				{
-					c.IsFaceUp = true;
-					_wastePile.AddCard(c);
-				}
-			}
-
 			UpdateGameState();
 		}
 	}
@@ -555,19 +512,18 @@ public partial class PyramidView : BaseGameView
 			var card = kvp.Value;
 			if (card == null) continue;
 			bool exposed = PyramidEngine.IsExposed(kvp.Key.r, kvp.Key.c, _state);
-			card.Modulate = exposed ? Colors.White : new Color(0.7f, 0.7f, 0.7f);
-			if (card == _selectedCard) card.Modulate = new Color(0.7f, 1f, 0.7f);
+			card.Modulate = exposed ? new Color(1, 1, 1) : new Color(0.7f, 0.7f, 0.7f);
 		}
 		
 		if (!_stockPile.IsEmpty) 
 		{
 			_stockPile.TopCard!.IsFaceUp = true;
-			_stockPile.TopCard.Modulate = (_selectedCard == _stockPile.TopCard) ? new Color(0.7f, 1f, 0.7f) : Colors.White;
+			_stockPile.TopCard.Modulate = new Color(1, 1, 1);
 		}
 		
 		if (!_wastePile.IsEmpty)
 		{
-			_wastePile.TopCard!.Modulate = (_selectedCard == _wastePile.TopCard) ? new Color(0.7f, 1f, 0.7f) : Colors.White;
+			_wastePile.TopCard!.Modulate = new Color(1, 1, 1);
 		}
 	}
 }

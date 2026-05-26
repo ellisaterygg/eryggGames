@@ -29,6 +29,10 @@ public partial class FreeCellView : BaseGameView
 	protected override bool ShowUndoButton => true;
 	protected override bool IsGameInProgress => _undoStack.Count > 0 && !_gameWon;
 
+	protected override int EntryCost => 100;
+	protected override int WinBonus => 100;
+	protected override int FoundationReward => 2;
+
 	private void CancelAutoComplete()
 	{
 		_autoCompleteCts?.Cancel();
@@ -40,19 +44,20 @@ public partial class FreeCellView : BaseGameView
 #if DEBUG
 		EngineTests.RunTests();
 #endif
-		_cardScene  = GD.Load<PackedScene>("res://scenes/Shared/Card.tscn");
+		_cardScene = GD.Load<PackedScene>("res://scenes/Shared/Card.tscn");
 		SetupPiles();
-		CreateAllCards(); 
-var saved = SaveManager.LoadGame<FreeCellState>("FreeCell");
-if (saved != null && !saved.IsFinished)
-{
-	ApplyState(saved);
-}
-else
-{
-	DealCards();
-}
-}
+		CreateAllCards();
+
+		var saved = SaveManager.LoadGame<FreeCellState>("FreeCell");
+		if (saved != null && !saved.IsFinished)
+		{
+			ApplyState(saved);
+		}
+		else
+		{
+			DealCards();
+		}
+	}
 
 
 	private void CreateAllCards()
@@ -88,11 +93,60 @@ else
 		}
 	}
 
+	protected override bool CanUndo => _undoStack.Count > 0;
+
 	protected override void HandleMouseButtonDoubleClicked(Vector2 globalPos)
 	{
 		if (_gameWon) return;
-		if (GetCardAt(globalPos) != null) return;
+		var card = GetCardAt(globalPos);
+		if (card != null)
+		{
+			if (TryMoveToFoundation(card))
+			{
+				RunSafeAutoMove();
+			}
+			return;
+		}
 		RunSafeAutoMove();
+	}
+
+	protected override void HandleCardClick(Card card)
+	{
+		if (_gameWon) return;
+		TryMoveToFoundation(card);
+	}
+
+	private bool TryMoveToFoundation(Card card)
+	{
+		var p = card.CurrentPile;
+		if (p == null || card != p.TopCard) return false;
+
+		var currentState = CaptureState();
+		var model = new CardModel(card.Suit, card.Rank);
+		
+		for (int i = 0; i < 4; i++)
+		{
+			if (FreeCellEngine.CanMove(currentState, new[] { model }, PileType.Foundation, i).IsValid)
+			{
+				_undoStack.Push(currentState.Clone());
+				
+				p.RemoveTopCard();
+				_foundations[i].AddCard(card);
+				
+				if (_foundations[i].Count == 1)
+				{
+					_foundations[i].FoundationSuit = card.Suit;
+					_foundationLabels[i].Text = SuitSymbol(card.Suit);
+				}
+
+				OnCardMovedToFoundation();
+				SaveManager.SaveGame("FreeCell", CaptureState());
+				_menu.SetUndoEnabled(true);
+				if (FreeCellEngine.IsWon(CaptureState())) EnterWinState();
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private async void RunSafeAutoMove()
@@ -131,6 +185,7 @@ else
 
 							var removedCard = pile.RemoveTopCard()!;
 							_foundations[i].AddCard(removedCard);
+							OnCardMovedToFoundation();
 							
 							if (_foundations[i].Count == 1)
 							{
@@ -216,11 +271,12 @@ else
 
 	protected override void OnBeforeDragStarted() => _pendingSnapshot = CaptureState();
 
-	protected override void OnDragEnded(bool valid)
+	protected override void OnDragEnded(bool valid, CardPile? target)
 	{
 		_pendingSnapshot = null;
 		if (valid)
 		{
+			if (target?.PileType == PileType.Foundation) OnCardMovedToFoundation();
 			var state = CaptureState();
 			SaveManager.SaveGame("FreeCell", state);
 			_menu.SetUndoEnabled(_undoStack.Count > 0);

@@ -28,10 +28,17 @@ public partial class GameMenu : CanvasLayer
     private Control _confirmOverlay = null!;
     private Label _confirmLabel = null!;
     private Action? _onConfirmAction;
+
+    private Control _bankruptOverlay = null!;
+    private Label _bankruptLabel = null!;
+    private Action? _onBankruptReset;
+    private Action? _onBankruptNegative;
+
     private Button _applyNextBtn = null!;
     private bool _isGameOver;
 
     private Button _undoBtn = null!;
+    private Label _scoreLabel = null!;
 
     public void Setup(float topInset, bool showUndo = true)
     {
@@ -44,7 +51,19 @@ public partial class GameMenu : CanvasLayer
         };
         AddChild(bar);
 
-        float btnY = topInset + 22f;
+        _scoreLabel = new Label
+        {
+            Text = $"Points: {ScoreManager.CurrentScore}",
+            Position = new Vector2(25, topInset + 5),
+            Size = new Vector2(200, 20),
+        };
+        _scoreLabel.AddThemeFontSizeOverride("font_size", 18);
+        _scoreLabel.AddThemeColorOverride("font_color", new Color(0.8f, 1f, 0.8f));
+        bar.AddChild(_scoreLabel);
+
+        ScoreManager.ScoreChanged += (score) => _scoreLabel.Text = $"Points: {score}";
+
+        float btnY = topInset + 30f;
         bar.AddChild(MakeMenuButton("New",     new Vector2(25,  btnY), () => EmitSignal(SignalName.NewGameRequested)));
         bar.AddChild(MakeMenuButton("Restart", new Vector2(165, btnY), () => EmitSignal(SignalName.RestartGameRequested)));
         
@@ -57,6 +76,7 @@ public partial class GameMenu : CanvasLayer
 
         SetupOptionsOverlay();
         SetupConfirmOverlay();
+        SetupBankruptOverlay();
     }
 
     public void SetGameOver(bool isOver)
@@ -66,9 +86,78 @@ public partial class GameMenu : CanvasLayer
 
     public void ShowConfirmation(string message, Action onConfirm)
     {
+        var vpSize = GetViewport().GetVisibleRect().Size;
+        _confirmOverlay.Size = vpSize;
+        _confirmOverlay.Position = Vector2.Zero;
         _confirmLabel.Text = message;
         _onConfirmAction = onConfirm;
         _confirmOverlay.Visible = true;
+    }
+
+    public void ShowBankruptcy(int required, Action onReset, Action onAllowNegative)
+    {
+        var vpSize = GetViewport().GetVisibleRect().Size;
+        _bankruptOverlay.Size = vpSize;
+        _bankruptOverlay.Position = Vector2.Zero;
+        _bankruptLabel.Text = $"Insufficient points! (Need {required})\n\nChoose how to proceed:";
+        _onBankruptReset = onReset;
+        _onBankruptNegative = onAllowNegative;
+        _bankruptOverlay.Visible = true;
+    }
+
+    private void SetupBankruptOverlay()
+    {
+        _bankruptOverlay = new Control { Name = "BankruptOverlay", Visible = false };
+        _bankruptOverlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        AddChild(_bankruptOverlay);
+
+        var dim = new ColorRect { Color = new Color(0, 0, 0, 0.85f) };
+        dim.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _bankruptOverlay.AddChild(dim);
+
+        var center = new CenterContainer();
+        center.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _bankruptOverlay.AddChild(center);
+
+        var panel = new PanelContainer { CustomMinimumSize = new Vector2(550, 350) };
+        center.AddChild(panel);
+
+        var vBox = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        vBox.AddThemeConstantOverride("separation", 40);
+        panel.AddChild(vBox);
+
+        _bankruptLabel = new Label { 
+            Text = "Insufficient points!", 
+            HorizontalAlignment = HorizontalAlignment.Center,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart
+        };
+        _bankruptLabel.AddThemeFontSizeOverride("font_size", 28);
+        vBox.AddChild(_bankruptLabel);
+
+        var btnVBox = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        btnVBox.AddThemeConstantOverride("separation", 20);
+        vBox.AddChild(btnVBox);
+
+        var resetBtn = new Button { Text = "Reset to 500 Points", CustomMinimumSize = new Vector2(300, 70) };
+        resetBtn.AddThemeFontSizeOverride("font_size", 24);
+        resetBtn.Pressed += () => {
+            _bankruptOverlay.Visible = false;
+            _onBankruptReset?.Invoke();
+        };
+        btnVBox.AddChild(resetBtn);
+
+        var negativeBtn = new Button { Text = "Allow Negative Points", CustomMinimumSize = new Vector2(300, 70) };
+        negativeBtn.AddThemeFontSizeOverride("font_size", 24);
+        negativeBtn.Pressed += () => {
+            _bankruptOverlay.Visible = false;
+            _onBankruptNegative?.Invoke();
+        };
+        btnVBox.AddChild(negativeBtn);
+
+        var cancelBtn = new Button { Text = "Cancel", CustomMinimumSize = new Vector2(300, 70) };
+        cancelBtn.AddThemeFontSizeOverride("font_size", 24);
+        cancelBtn.Pressed += () => _bankruptOverlay.Visible = false;
+        btnVBox.AddChild(cancelBtn);
     }
 
     private void SetupConfirmOverlay()

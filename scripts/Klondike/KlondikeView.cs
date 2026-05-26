@@ -26,6 +26,11 @@ public partial class KlondikeView : BaseGameView
 
 	protected override bool ShowUndoButton => true;
 	protected override bool IsGameInProgress => _undoStack.Count > 0 && !_gameWon;
+	protected override bool CanUndo => _undoStack.Count > 0;
+
+	protected override int EntryCost => 52;
+	protected override int WinBonus => _state.DrawCount == 1 ? 100 : 250;
+	protected override int FoundationReward => 5;
 
 	protected override void SetupGame()
 	{
@@ -71,7 +76,7 @@ if (saved != null && !saved.IsFinished)
 }
 else
 {
-	NewGame();
+	DealFromOrder(new Deck().Shuffle().Select(c => new CardModel(c.suit, c.rank)).ToList());
 }
 
 		SetupOptionsMenu();
@@ -103,6 +108,7 @@ else
 				card.Visible = false;
 				AddChild(card);
 				_cardLookup[(suit, rank)] = card;
+
 			}
 		}
 	}
@@ -187,8 +193,60 @@ else
 	protected override void HandleMouseButtonDoubleClicked(Vector2 globalPos)
 	{
 		if (_gameWon) return;
-		if (GetCardAt(globalPos) != null) return;
+
+		var card = GetCardAt(globalPos);
+		if (card != null)
+		{
+			if (card.CurrentPile == _stockPile)
+			{
+				DrawFromStock();
+				return;
+			}
+
+			if (TryMoveToFoundation(card))
+			{
+				RunSafeAutoMove();
+				return;
+			}
+		}
+		else
+		{
+			if (IsPointInPile(globalPos, _stockPile))
+			{
+				DrawFromStock();
+				return;
+			}
+		}
+
 		RunSafeAutoMove();
+	}
+
+	private bool TryMoveToFoundation(Card card)
+	{
+		var p = card.CurrentPile;
+		if (p == null || card != p.TopCard) return false;
+
+		var currentState = CaptureState();
+		var model = new CardModel(card.Suit, card.Rank);
+		
+		for (int i = 0; i < 4; i++)
+		{
+			if (KlondikeEngine.CanMove(currentState, new List<CardModel> { model }, PileType.Foundation, i))
+			{
+				_undoStack.Push(currentState);
+				
+				p.RemoveTopCard();
+				_foundations[i].AddCard(card);
+				
+				CheckTableauFlip();
+				OnCardMovedToFoundation();
+				UpdateStateFromPiles();
+				SaveGame();
+				if (KlondikeEngine.IsWon(_state)) EnterWinState();
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private async void RunSafeAutoMove()
@@ -230,6 +288,7 @@ else
 
 							var removedCard = pile.RemoveTopCard()!;
 							_foundations[i].AddCard(removedCard);
+							OnCardMovedToFoundation();
 							
 							movedAny = true;
 							break;
@@ -373,11 +432,12 @@ else
 
 	protected override void OnBeforeDragStarted() => _undoStack.Push(CaptureState());
 
-	protected override void OnDragEnded(bool valid)
+	protected override void OnDragEnded(bool valid, CardPile? target)
 	{
 		if (!valid) _undoStack.Pop();
 		else
 		{
+			if (target?.PileType == PileType.Foundation) OnCardMovedToFoundation();
 			CheckTableauFlip();
 			UpdateStateFromPiles();
 			SaveGame();

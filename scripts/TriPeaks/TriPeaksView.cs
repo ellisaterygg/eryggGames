@@ -24,6 +24,12 @@ public partial class TriPeaksView : BaseGameView
 
 	protected override bool ShowUndoButton => true;
 	protected override bool IsGameInProgress => _undoStack.Count > 0 && !_gameWon;
+	protected override bool CanUndo => _undoStack.Count > 0;
+
+	protected override int EntryCost => 50;
+	protected override int WinBonus => _state.WinnableOnly ? 50 : 100;
+
+	private int _currentChain = 0;
 
 	protected override void SetupGame()
 	{
@@ -279,9 +285,24 @@ else
 		}
 	}
 
+	protected override void HandleMouseButtonDoubleClicked(Vector2 globalPos)
+	{
+		if (_gameWon) return;
+		var card = GetCardAt(globalPos);
+		if (card != null)
+		{
+			if (card.CurrentPile == _stockPile) DrawFromStock();
+			else HandleCardClick(card);
+		}
+		else if (IsPointInPile(globalPos, _stockPile))
+		{
+			DrawFromStock();
+		}
+	}
+
 	protected override void OnBeforeDragStarted() => _pendingSnapshot = _state.Clone();
 
-	protected override void OnDragEnded(bool valid) => _pendingSnapshot = null;
+	protected override void OnDragEnded(bool valid, CardPile? target) => _pendingSnapshot = null;
 
 	protected override void HandleEmptySpaceClick(Vector2 globalPos)
 	{
@@ -328,6 +349,7 @@ else
 	{
 		if (_state.Stock.Count > 0)
 		{
+			_currentChain = 0;
 			_undoStack.Push(_state.Clone());
 			var model = _state.Stock[^1];
 			_state.Stock.RemoveAt(_state.Stock.Count - 1);
@@ -344,6 +366,8 @@ else
 		var pPos = GetPeakPos(card);
 		if (pPos.HasValue)
 		{
+			_currentChain++;
+			RewardPoints(_currentChain);
 			_state.Peaks[pPos.Value.r][pPos.Value.c] = null;
 			_peaksCards.Remove(pPos.Value);
 			var model = GetModel(card);

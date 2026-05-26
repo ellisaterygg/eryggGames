@@ -30,7 +30,7 @@ public abstract partial class BaseGameView : Node2D
         _menu.Setup(_topInset, ShowUndoButton);
         _menu.NewGameRequested += OnNewGameRequested;
         _menu.RestartGameRequested += OnRestartGameRequested;
-        _menu.UndoRequested += UndoMove;
+        _menu.UndoRequested += RequestUndo;
         _menu.GamesRequested += ShowGameSelection;
         _menu.OptionsApplied += OnOptionsApplied;
 
@@ -45,30 +45,77 @@ public abstract partial class BaseGameView : Node2D
     protected abstract void NewGame();
     protected abstract void RestartGame();
     protected virtual void UndoMove() { }
+    protected virtual bool CanUndo => true;
     protected virtual void OnOptionsApplied(bool startNewGame) { }
+
+    protected virtual int EntryCost => 0;
+    protected virtual int RestartCost => EntryCost;
+    protected virtual int UndoCost => 5;
+    protected virtual int WinBonus => 0;
+    protected virtual int FoundationReward => 0;
+
+    protected void RewardPoints(long amount) => ScoreManager.AddScore(amount);
+
+    protected virtual void OnCardMovedToFoundation()
+    {
+        RewardPoints(FoundationReward);
+    }
+
+    protected bool CanAfford(int cost)
+    {
+        if (ScoreManager.CurrentScore >= cost || ScoreManager.AllowNegative) return true;
+        _menu.ShowBankruptcy(cost, ScoreManager.ResetScore, () => ScoreManager.SetAllowNegative(true));
+        return false;
+    }
 
     private void OnNewGameRequested()
     {
+        if (!CanAfford(EntryCost)) return;
+
         if (IsGameInProgress)
         {
-            _menu.ShowConfirmation("Start a new game? Current progress will be lost.", NewGame);
+            _menu.ShowConfirmation("Start a new game? Current progress will be lost.", () => {
+                ScoreManager.SubtractScore(EntryCost);
+                NewGame();
+            });
         }
         else
         {
+            ScoreManager.SubtractScore(EntryCost);
             NewGame();
         }
     }
 
     private void OnRestartGameRequested()
     {
+        if (!CanAfford(RestartCost)) return;
+
         if (IsGameInProgress)
         {
-            _menu.ShowConfirmation("Restart this game? Current progress will be lost.", RestartGame);
+            _menu.ShowConfirmation("Restart this game? Current progress will be lost.", () => {
+                ScoreManager.SubtractScore(RestartCost);
+                RestartGame();
+            });
         }
         else
         {
+            ScoreManager.SubtractScore(RestartCost);
             RestartGame();
         }
+    }
+
+    protected virtual void RequestUndo()
+    {
+        if (!CanUndo) return;
+
+        if (ScoreManager.CurrentScore < UndoCost && !ScoreManager.AllowNegative)
+        {
+            _menu.ShowBankruptcy(UndoCost, ScoreManager.ResetScore, () => ScoreManager.SetAllowNegative(true));
+            return;
+        }
+
+        ScoreManager.SubtractScore(UndoCost);
+        UndoMove();
     }
 
     protected void ShowGameSelection()
@@ -98,8 +145,11 @@ public abstract partial class BaseGameView : Node2D
 
     protected void EnterWinState(string message = "You Won!")
     {
+        if (_gameWon) return;
         _gameWon = true;
         _menu.SetGameOver(true);
+        RewardPoints(WinBonus);
+
         _winOverlay = new CanvasLayer { Layer = 5 };
         AddChild(_winOverlay);
         
@@ -276,7 +326,7 @@ public abstract partial class BaseGameView : Node2D
         _dragOriginPile = null;
         _dragOffsets = Array.Empty<Vector2>();
         
-        OnDragEnded(valid);
+        OnDragEnded(valid, valid ? target : null);
     }
 
     protected virtual void CancelDrag()
@@ -298,7 +348,7 @@ public abstract partial class BaseGameView : Node2D
     protected virtual void HandleCardClick(Card card) { }
     protected virtual void HandleEmptySpaceClick(Vector2 globalPos) { }
     protected virtual void OnBeforeDragStarted() { }
-    protected virtual void OnDragEnded(bool valid) { }
+    protected virtual void OnDragEnded(bool valid, CardPile? target) { }
 
     // ── Utilities ────────────────────────────────────────────────────────────
 

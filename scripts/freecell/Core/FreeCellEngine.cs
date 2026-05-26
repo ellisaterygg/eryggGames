@@ -121,17 +121,32 @@ public static class FreeCellEngine
 		if (card.Rank <= Rank.Two) return true;
 
 		// A card of rank R is safe to move if it is no longer "useful" as a base for stacks.
-		// It is useless if all cards of rank R-1 that could sit on it are already "foundation-ready".
-		// A card is foundation-ready if its slot (rank R-2) is already filled in the foundation.
-		// To be absolutely safe and match user preference, we check if ALL 4 suits have reached R-2.
-		int requiredRank = (int)card.Rank - 2;
-		
+		// Relaxed safe rule: both opposite color foundations are at R-2, and same color other suit is at R-3.
+		int oppositeRequired = (int)card.Rank - 2;
+		int sameColorOtherRequired = (int)card.Rank - 3;
+
+		// We check all foundations and see what suits they have and their current rank (count).
+		int maxClubs = 0, maxDiamonds = 0, maxHearts = 0, maxSpades = 0;
 		for (int i = 0; i < 4; i++)
 		{
-			if (state.Foundations[i].Count < requiredRank) return false;
+			var suit = state.FoundationSuits[i];
+			int count = state.Foundations[i].Count;
+			if (suit == Suit.Clubs) maxClubs = count;
+			else if (suit == Suit.Diamonds) maxDiamonds = count;
+			else if (suit == Suit.Hearts) maxHearts = count;
+			else if (suit == Suit.Spades) maxSpades = count;
 		}
 
-		return true;
+		if (card.IsRed)
+		{
+			return maxClubs >= oppositeRequired && maxSpades >= oppositeRequired && 
+				   (card.Suit == Suit.Hearts ? maxDiamonds >= sameColorOtherRequired : maxHearts >= sameColorOtherRequired);
+		}
+		else
+		{
+			return maxHearts >= oppositeRequired && maxDiamonds >= oppositeRequired && 
+				   (card.Suit == Suit.Clubs ? maxSpades >= sameColorOtherRequired : maxClubs >= sameColorOtherRequired);
+		}
 	}
 
 	public record AutoCompleteMove(PileType FromType, int FromIdx, int ToIdx);
