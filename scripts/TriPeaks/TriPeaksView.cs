@@ -6,7 +6,6 @@ using System.Linq;
 using EryggGames.Core;
 using EryggGames.Shared;
 using EryggGames.TriPeaks.Core;
-using EryggGames.TriPeaks.Tests;
 
 namespace EryggGames.TriPeaks;
 
@@ -33,9 +32,6 @@ public partial class TriPeaksView : BaseGameView
 
 	protected override void SetupGame()
 	{
-#if DEBUG
-		SolverTests.RunTests();
-#endif
 		_cardScene = GD.Load<PackedScene>("res://scenes/Shared/Card.tscn");
 		SetupPiles();
 var saved = SaveManager.LoadGame<TriPeaksState>("TriPeaks");

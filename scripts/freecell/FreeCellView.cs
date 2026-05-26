@@ -6,7 +6,6 @@ using System.Linq;
 using EryggGames.Core;
 using EryggGames.Shared;
 using EryggGames.FreeCell.Core;
-using EryggGames.FreeCell.Tests;
 
 namespace EryggGames.FreeCell;
 
@@ -41,9 +40,6 @@ public partial class FreeCellView : BaseGameView
 
 	protected override void SetupGame()
 	{
-#if DEBUG
-		EngineTests.RunTests();
-#endif
 		_cardScene = GD.Load<PackedScene>("res://scenes/Shared/Card.tscn");
 		SetupPiles();
 		CreateAllCards();

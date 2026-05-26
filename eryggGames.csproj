@@ -5,4 +5,11 @@
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="EryggGames.Core\**\*.cs" />
+    <Compile Remove="EryggGames.Tests\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="EryggGames.Core\EryggGames.Core.csproj" />
+  </ItemGroup>
 </Project>

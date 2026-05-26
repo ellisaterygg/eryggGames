@@ -15,6 +15,9 @@ obj/
 *.user
 *.userosscache
 
+# Claude Code local settings
+.claude/
+
 # OS-specific ignores
 .DS_Store
 Thumbs.db
