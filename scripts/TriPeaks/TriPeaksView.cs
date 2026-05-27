@@ -143,6 +143,7 @@ else
 	{
 		_state.Stock.Clear();
 		_state.Waste.Clear();
+		_state.IsFinished = false;
 		_state.BackgroundFile = _currentBackgroundFile;
 		for (int i = 0; i < 4; i++)
 		{
@@ -394,8 +395,9 @@ else
 	private void UpdateGameState()
 	{
 		UpdateCardVisuals();
+		if (TriPeaksEngine.IsWon(_state)) _state.IsFinished = true;
 		SaveGame();
-		if (TriPeaksEngine.IsWon(_state)) EnterWinState();
+		if (_state.IsFinished) EnterWinState();
 	}
 
 	private void SaveGame()

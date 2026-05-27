@@ -136,9 +136,11 @@ public partial class FreeCellView : BaseGameView
 				}
 
 				OnCardMovedToFoundation();
-				SaveManager.SaveGame("FreeCell", CaptureState());
+				var winState = CaptureState();
+				if (FreeCellEngine.IsWon(winState)) winState.IsFinished = true;
+				SaveManager.SaveGame("FreeCell", winState);
 				_menu.SetUndoEnabled(true);
-				if (FreeCellEngine.IsWon(CaptureState())) EnterWinState();
+				if (winState.IsFinished) EnterWinState();
 				return true;
 			}
 		}
@@ -208,9 +210,10 @@ public partial class FreeCellView : BaseGameView
 		if (totalProgress && !token.IsCancellationRequested)
 		{
 			var state = CaptureState();
+			if (FreeCellEngine.IsWon(state)) state.IsFinished = true;
 			SaveManager.SaveGame("FreeCell", state);
 			_menu.SetUndoEnabled(_undoStack.Count > 0);
-			if (FreeCellEngine.IsWon(state)) EnterWinState();
+			if (state.IsFinished) EnterWinState();
 		}
 	}
 
@@ -274,9 +277,10 @@ public partial class FreeCellView : BaseGameView
 		{
 			if (target?.PileType == PileType.Foundation) OnCardMovedToFoundation();
 			var state = CaptureState();
+			if (FreeCellEngine.IsWon(state)) state.IsFinished = true;
 			SaveManager.SaveGame("FreeCell", state);
 			_menu.SetUndoEnabled(_undoStack.Count > 0);
-			if (FreeCellEngine.IsWon(state)) EnterWinState();
+			if (state.IsFinished) EnterWinState();
 		}
 	}
 

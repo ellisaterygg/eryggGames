@@ -39,6 +39,12 @@ public partial class GameMenu : CanvasLayer
 
     private Button _undoBtn = null!;
     private Label _scoreLabel = null!;
+    private Action<long>? _scoreHandler;
+
+    public override void _ExitTree()
+    {
+        if (_scoreHandler != null) ScoreManager.ScoreChanged -= _scoreHandler;
+    }
 
     public void Setup(float topInset, bool showUndo = true)
     {
@@ -61,7 +67,8 @@ public partial class GameMenu : CanvasLayer
         _scoreLabel.AddThemeColorOverride("font_color", new Color(0.8f, 1f, 0.8f));
         bar.AddChild(_scoreLabel);
 
-        ScoreManager.ScoreChanged += (score) => _scoreLabel.Text = $"Points: {score}";
+        _scoreHandler = (score) => _scoreLabel.Text = $"Points: {score}";
+        ScoreManager.ScoreChanged += _scoreHandler;
 
         float btnY = topInset + 30f;
         bar.AddChild(MakeMenuButton("New",     new Vector2(25,  btnY), () => EmitSignal(SignalName.NewGameRequested)));

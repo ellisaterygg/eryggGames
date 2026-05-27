@@ -115,6 +115,7 @@ else
 
 	protected override void NewGame()
 	{
+		_autoMoveCts?.Cancel();
 		ExitWinState();
 		LoadBackground();
 
@@ -166,6 +167,7 @@ else
 		_state.Waste.Clear();
 		for (int i = 0; i < 4; i++) _state.Foundation[i].Clear();
 
+		_state.IsFinished = false;
 		UpdateStateFromPiles();
 		SaveGame();
 	}
@@ -241,8 +243,9 @@ else
 				CheckTableauFlip();
 				OnCardMovedToFoundation();
 				UpdateStateFromPiles();
+				if (KlondikeEngine.IsWon(_state)) _state.IsFinished = true;
 				SaveGame();
-				if (KlondikeEngine.IsWon(_state)) EnterWinState();
+				if (_state.IsFinished) EnterWinState();
 				return true;
 			}
 		}
@@ -311,8 +314,9 @@ else
 		if (totalProgress && !token.IsCancellationRequested)
 		{
 			UpdateStateFromPiles();
+			if (KlondikeEngine.IsWon(_state)) _state.IsFinished = true;
 			SaveGame();
-			if (KlondikeEngine.IsWon(_state)) EnterWinState();
+			if (_state.IsFinished) EnterWinState();
 		}
 	}
 
@@ -440,8 +444,9 @@ else
 			if (target?.PileType == PileType.Foundation) OnCardMovedToFoundation();
 			CheckTableauFlip();
 			UpdateStateFromPiles();
+			if (KlondikeEngine.IsWon(_state)) _state.IsFinished = true;
 			SaveGame();
-			if (KlondikeEngine.IsWon(_state)) EnterWinState();
+			if (_state.IsFinished) EnterWinState();
 		}
 		UpdateWastePositions();
 	}
