@@ -136,6 +136,59 @@ public class FreeCellEngineTests
 
     #endregion
 
+    #region CanMove — Stack size limits
+
+    [Fact]
+    public void should_reject_stack_move_when_source_vacated_and_count_exceeds_max()
+    {
+        var state = BuildStateForStackSizeTest();
+        var cards = new[]
+        {
+            new CardModel(Suit.Spades, Rank.Nine),
+            new CardModel(Suit.Hearts, Rank.Eight),
+            new CardModel(Suit.Spades, Rank.Seven),
+            new CardModel(Suit.Hearts, Rank.Six),
+            new CardModel(Suit.Spades, Rank.Five),
+            new CardModel(Suit.Hearts, Rank.Four),
+            new CardModel(Suit.Spades, Rank.Three)
+        };
+
+        var result = FreeCellEngine.CanMove(state, cards, PileType.Tableau, 1, sourceTableauIndex: 0);
+
+        Assert.False(result.IsValid);
+    }
+
+    [Fact]
+    public void should_allow_stack_move_when_source_vacated_and_count_equals_max()
+    {
+        var state = BuildStateForStackSizeTest();
+        var cards = new[]
+        {
+            new CardModel(Suit.Spades, Rank.Nine),
+            new CardModel(Suit.Hearts, Rank.Eight),
+            new CardModel(Suit.Spades, Rank.Seven),
+            new CardModel(Suit.Hearts, Rank.Six),
+            new CardModel(Suit.Spades, Rank.Five),
+            new CardModel(Suit.Hearts, Rank.Four)
+        };
+
+        var result = FreeCellEngine.CanMove(state, cards, PileType.Tableau, 1, sourceTableauIndex: 0);
+
+        Assert.True(result.IsValid);
+    }
+
+    private static FreeCellState BuildStateForStackSizeTest()
+    {
+        var state = new FreeCellState();
+        state.Tableau[1].Add(new CardModel(Suit.Hearts, Rank.Ten));
+        for (int i = 2; i <= 6; i++) state.Tableau[i].Add(new CardModel(Suit.Clubs, Rank.King));
+        state.FreeCells[2].Add(new CardModel(Suit.Clubs, Rank.King));
+        state.FreeCells[3].Add(new CardModel(Suit.Clubs, Rank.King));
+        return state;
+    }
+
+    #endregion
+
     #region CanMove — FreeCell
 
     [Fact]

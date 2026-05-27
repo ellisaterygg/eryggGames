@@ -249,7 +249,11 @@ public partial class FreeCellView : BaseGameView
 		else if (target.PileType == PileType.FreeCell) targetIdx = Array.IndexOf(_freeCells, target);
 		else if (target.PileType == PileType.Foundation) targetIdx = Array.IndexOf(_foundations, target);
 
-		return FreeCellEngine.CanMove(CaptureState(), movingModels, target.PileType, targetIdx).IsValid;
+		int? sourceTableauIdx = null;
+		if (_dragOriginPile?.PileType == PileType.Tableau)
+			sourceTableauIdx = Array.IndexOf(_tableau, _dragOriginPile);
+
+		return FreeCellEngine.CanMove(CaptureState(), movingModels, target.PileType, targetIdx, sourceTableauIdx).IsValid;
 	}
 
 	protected override void ExecuteDrop(CardPile target, List<Card> draggingCards)

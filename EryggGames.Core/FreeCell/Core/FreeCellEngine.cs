@@ -34,7 +34,7 @@ public static class FreeCellEngine
 		return (emptyCells + 1) * (int)Math.Pow(2, Math.Max(0, emptyCols));
 	}
 
-	public static MoveResult CanMove(FreeCellState state, IReadOnlyList<CardModel> movingCards, PileType targetType, int targetIndex)
+	public static MoveResult CanMove(FreeCellState state, IReadOnlyList<CardModel> movingCards, PileType targetType, int targetIndex, int? sourceTableauIndex = null)
 	{
 		if (movingCards.Count == 0) return new MoveResult(false, "No cards to move.");
 
@@ -50,7 +50,7 @@ public static class FreeCellEngine
 					if (bottomCard.IsRed == top.IsRed) return new MoveResult(false, "Must alternate colors.");
 					if ((int)bottomCard.Rank != (int)top.Rank - 1) return new MoveResult(false, "Must be one rank lower.");
 				}
-				int max = CalculateMaxMovable(state, null, targetIndex);
+				int max = CalculateMaxMovable(state, sourceTableauIndex, targetIndex);
 				if (movingCards.Count > max) return new MoveResult(false, $"Too many cards to move (Max: {max}).");
 				return new MoveResult(true);
 
