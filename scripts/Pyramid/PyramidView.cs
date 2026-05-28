@@ -43,6 +43,7 @@ public partial class PyramidView : BaseGameView
 		}
 		else
 		{
+			if (saved != null) _state.WinnableOnly = saved.WinnableOnly;
 			NewGame();
 		}
 		SetupOptionsMenu();

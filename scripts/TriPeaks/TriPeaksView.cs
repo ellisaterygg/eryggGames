@@ -42,6 +42,7 @@ if (saved != null && !saved.IsFinished)
 }
 else
 {
+	if (saved != null) _state.WinnableOnly = saved.WinnableOnly;
 	NewGame();
 }
 
