@@ -72,6 +72,20 @@ public partial class PyramidView : BaseGameView
 		else SaveGame();
 	}
 
+	protected override void HideCardsAndMarkings()
+	{
+		base.HideCardsAndMarkings();
+		GetNode<Node2D>("PyramidContainer").Visible = false;
+		_redealLabel.Visible = false;
+	}
+
+	protected override void ShowCardsAndMarkings()
+	{
+		base.ShowCardsAndMarkings();
+		GetNode<Node2D>("PyramidContainer").Visible = true;
+		_redealLabel.Visible = true;
+	}
+
 	protected override void UndoMove()
 	{
 		if (_undoStack.Count > 0)

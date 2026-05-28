@@ -72,6 +72,18 @@ else
 		else SaveGame();
 	}
 
+	protected override void HideCardsAndMarkings()
+	{
+		base.HideCardsAndMarkings();
+		GetNode<Node2D>("PeaksContainer").Visible = false;
+	}
+
+	protected override void ShowCardsAndMarkings()
+	{
+		base.ShowCardsAndMarkings();
+		GetNode<Node2D>("PeaksContainer").Visible = true;
+	}
+
 	protected override void UndoMove()
 	{
 		if (_undoStack.Count > 0)
